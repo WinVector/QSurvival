@@ -1,0 +1,94 @@
+---
+title: "QSurvival on AIDS Data"
+author: "Win-Vector LLC"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{QSurvival on AIDS Data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(fig.width=7)
+```
+
+## Load Libraries and read in data
+
+Data originally downloaded from the [Statistical Software Repository](https://www.umass.edu/statdata/statdata/data/)
+at the University of Massassachusetts Amherst (Dataset is labeled "AIDS clinical trial"). We reprocessed the data to make it more readable (see file actg_reprocess.R). 
+
+The data come from a population of HIV-positive patients in a double-blind, placebo-controlled trial that compared four
+drug regimens. (Hammer et al., 1997).  For the purposes of this demonstration we will compare patients on a drug regimen with indinavir (IDV) to those on a regimen without it. The outcome of interest is time  to AIDS defining event or death (called `AIDSorDeath` in the dataset we use).  Because efficacy results met a pre-specified level of significance at an interim analysis, the trial was stopped early.
+
+
+```{r load, message=FALSE}
+library(QSurvival)
+library(mgcv)
+library(ggplot2)
+library(dplyr)
+
+adata = readRDS("AIDSdata/AIDSdata.rds")
+
+parallelCluster <- NULL
+## can't run paralle code in vignettes
+#if(requireNamespace("parallel",quietly=TRUE)) {
+#     parallelCluster <- parallel::makeCluster(4)
+#}
+```
+
+## Build the QSurvival Model
+
+Note that the model shows a decrease in risk for patients on a regiment that includes IDV, a decreased risk for patients with higher CD4 count at the beginning of the study (as expected), an increase in risk for patients who exhibited more symptoms at the beginning of the study, and a slight increase for older patients.
+
+```{r buildmodel}
+# define the variables of interest.
+vars = setdiff(colnames(adata), c("time", "id", "time_to_death", "AIDSorDeath", "death", "treatment_gp"))
+
+# build the training set from the original data. 
+adataX = buildQuasiObsForTraining(adata, adata$time, ifelse(adata$AIDSorDeath==1, adata$time, NA),
+                                  "rowid", "timestep", "eventhappened",
+                                  parallelCluster=parallelCluster)
+
+# fit a model using GAM with time splined.
+formula = paste("eventhappened ~ s(timestep) +", paste(vars, collapse="+"))
+model = gam(as.formula(formula), data=adataX, family=binomial)
+summary(model)
+```
+
+## Analyze Model Results
+
+When we compare the estimated survival curves of the two treatment groups (`treatment_idv = TRUE/FALSE`), we see that the patients with a regiment including IDV tend to survive longer compared to those not treated with IDV. However note that we cannot well estimate the true survival curves or patient lifetimes, since the study was short (and truncated) and most patients survived past the time of the study.
+
+```{r analyze}
+# re-prepare adata for evaluation
+adataT = buildQuasiObsForComparison(adata, 365,
+                                 adata$time, ifelse(adata$AIDSorDeath==1, adata$time, NA),
+                                 "rowid", "timestep", "eventhappened",
+                                  parallelCluster=parallelCluster)
+# get the hazard functions
+adataT$hazard = as.numeric(predict(model, newdata=adataT, type="response"))
+
+# build the individual level hazard and survival curves
+summaries = summarizeHazard(adataT, "rowid", "timestep", "hazard",
+                                  parallelCluster=parallelCluster)
+
+# frame of curves
+curves = summaries$details[, c("rowid", "timestep", "hazard", "cumulativeHazard", "survival", "deathIntensity")]
+
+# join the treatment information to the curves
+curves = dplyr::inner_join(curves, adataT[, c('rowid', 'timestep', 'treatment_idv')], by=c("rowid", "timestep"))
+
+# get the overall curves, grouped by treatment condition
+meanCurves = dplyr::summarize(dplyr::group_by(curves, timestep, treatment_idv),
+          hazard = mean(hazard),
+          survival=mean(survival),
+          deathIntensity = mean(deathIntensity))
+
+# compare survival curves
+ggplot(meanCurves, aes(x=timestep, y=survival, color=treatment_idv)) + geom_line()
+
+
+
+```
+
