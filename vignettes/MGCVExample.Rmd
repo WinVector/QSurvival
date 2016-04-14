@@ -50,9 +50,11 @@ ggplot(data=newd,mapping=aes(x=time,y=survival,ymin=survivalL,ymax=survivalU)) +
 ```{r quasiobs}
 library('QSurvival')
 
+timecut <- 2750
 dTrain <- buildQuasiObsForTraining(col1, 
                                    col1$time, ifelse(col1$status==1,col1$time,NA), 'id',
                                    'days', 'recurrence')
+dTrain$cappedDays <- pmin(timecut,dTrain$days)
 # sample down to speed up fitting, but keep rare events
 dTrainPos <- dTrain[dTrain$recurrence,]
 dTrainPos$wts <- 1.0
@@ -61,7 +63,7 @@ origNegSize <- nrow(dTrainNeg)
 dTrainNeg <- dTrainNeg[sample.int(origNegSize,10000),]
 dTrainNeg$wts <- origNegSize/nrow(dTrainNeg)
 dTrainSample <- rbind(dTrainPos,dTrainNeg)
-model <- gam(recurrence~s(age,by=sex)+sex+s(nodes)+perfor+rx+obstruct+adhere+s(days),
+model <- gam(recurrence~s(age,by=sex)+sex+s(nodes)+perfor+rx+obstruct+adhere+s(cappedDays),
          family=binomial,data=dTrainSample,weights=wts)
 summary(model)
 
@@ -72,6 +74,7 @@ dRes <- buildQuasiObsForComparison(colJ,
                                     3000,
                                    colJ$age, ifelse(colJ$status==1,col1$age,NA), 'id',
                                    'days', 'recurrence')
+dRes$cappedDays <- pmin(timecut,dRes$days)
 dRes$hazard <- predict(model,newdata=dRes,type='response')
 dPlot <- QSurvival::summarizeHazard(dRes,'id','days','hazard',
                            cumulativeHazardColumnName='cumulativeHazard',
