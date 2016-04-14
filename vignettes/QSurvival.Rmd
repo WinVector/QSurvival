@@ -1,0 +1,232 @@
+---
+title: "QSurvival use"
+author: "Win-Vector LLC"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{QSurvival}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width=7)
+```
+
+```{r makedata,echo=FALSE,messages=FALSE,warnings=FALSE,results='hide'}
+suppressWarnings(suppressMessages(library("ggplot2")))
+suppressWarnings(suppressMessages(library('dplyr')))
+suppressWarnings(suppressMessages(library('mgcv')))
+set.seed(32535)
+
+params <- list(groupA=list(k=1.8,lambda=50),
+               groupB=list(k=0.8,lambda=10))
+#plot(dweibull(1:100,shape=params[['groupA']][['k']],
+#              scale=params[['groupA']][['lambda']]))
+#plot(dweibull(1:100,shape=params[['groupB']][['k']],
+#              scale=params[['groupB']][['lambda']]))
+
+censorPoint = 50
+
+mkData <- function(n) {
+  d <- data.frame(group=sample(c('groupA','groupB'),n,replace=TRUE),
+                  stringsAsFactors=FALSE)
+  d$unobservedLifetime <- vapply(seq_len(nrow(d)),
+                                 function(i) {
+                                   max(1,round(rweibull(1,shape=params[[d[i,'group']]][['k']],
+                                                        scale=params[[d[i,'group']]][['lambda']])))
+                                 },
+                                 numeric(1))
+  d$observedLifetime <- pmin(d$unobservedLifetime,censorPoint)
+  d$censored <- d$unobservedLifetime>d$observedLifetime
+  d
+}
+
+
+dTrain <- mkData(200)
+dTest <- mkData(101)
+dApplication <- mkData(51)
+
+ggplot(dTrain,aes(x=unobservedLifetime,color=group)) +
+  geom_density() + xlim(c(0,150)) + geom_vline(xintercept = censorPoint)
+dTrain %>% dplyr::group_by(group) %>%
+  dplyr::summarise(meanLifetime=mean(unobservedLifetime))
+
+ggplot(dTrain,aes(x=observedLifetime,color=group)) +
+  geom_density() 
+dTrain %>% dplyr::group_by(group) %>%
+  dplyr::summarise(meanLifetime=mean(observedLifetime))
+```
+
+
+
+Logistic regression direct hazard method for survival models similar to: http://data.princeton.edu/wws509/notes/c7.pdf 
+
+```{r preparetomodel}
+parallelCluster <- c()
+## can't run paralle code in vignettes
+#if(requireNamespace("parallel",quietly=TRUE)) {
+#     parallelCluster <- parallel::makeCluster(4)
+#}
+
+ageLimit <- 45
+
+
+# Can sub-sample the quasi events, but results are sensitive to this
+# so you want targetSize to be large (but may want to set it for safety).
+prepTrain <- 
+  QSurvival::buildQuasiObsForTraining(dTrain,
+                                      dTrain$observedLifetime,
+                                      ifelse(dTrain$censored,NA,dTrain$observedLifetime),
+                                      'ID','observedAge','deathEvent',
+                                      parallelCluster=parallelCluster,
+                                      targetSize=10000000)
+# allow windowing further out than training without causing new levels.
+# basically want time as shown to model (if you are showing time to mode)
+# to end will before censoring region to make sure you are not extrapolating
+# off a noisy end estimate.
+prepTrain$surrogateAge <- pmin(prepTrain$observedAge,ageLimit)
+
+obsWindow <- 200
+
+prepStudy <- 
+  QSurvival::buildQuasiObsForComparison(dTrain,
+                                        obsWindow,
+                                      dTrain$observedLifetime,
+                                      ifelse(dTrain$censored,NA,dTrain$observedLifetime),
+                                      'ID','observedAge','deathEvent',
+                                      parallelCluster=parallelCluster)
+prepStudy$surrogateAge <- pmin(prepStudy$observedAge,ageLimit)
+
+
+prepTest <- 
+  QSurvival::buildQuasiObsForComparison(dTest,
+                                     obsWindow,
+                                     dTest$observedLifetime,
+                                     ifelse(dTest$censored,NA,dTest$observedLifetime),
+                                     'ID','observedAge','deathEvent',
+                                     parallelCluster=parallelCluster)
+prepTest$surrogateAge <- pmin(prepTest$observedAge,45)
+
+prepApp <- 
+  QSurvival::buildQuasiObsForApplication(dApplication,
+                                         obsWindow,
+                                         'ID','observedAge',
+                                         parallelCluster=parallelCluster)
+prepApp$surrogateAge <- pmin(prepApp$observedAge,45)
+
+if(!is.null(parallelCluster)) {
+  parallel::stopCluster(parallelCluster)
+  parallelCluster <- NULL
+}
+
+```
+
+*****
+
+Reduced complexity of age portion of model, using spline over surrogate age.
+
+```{r model}
+# Could use s(observedAge), but using s(surrogateAge) means we don't use
+# the GAM spline to extrapolate.
+# Use degree 2 spline to approximate typical bathtub hazard shape.
+# Use "0+" notation to kick out DC term which might be mixture of groups sensitive.
+model <- gam(deathEvent~0+group+s(surrogateAge,k=2),
+             data=prepTrain,family=binomial)
+print(summary(model))
+prepStudy$hazardPrediction <- as.numeric(predict(model,newdata=prepStudy,type='response'))
+prepTest$hazardPrediction <- as.numeric(predict(model,newdata=prepTest,type='response'))
+prepApp$hazardPrediction <- as.numeric(predict(model,newdata=prepApp,type='response'))
+```
+
+
+```{r plotstudy}
+studyD <- QSurvival::summarizeHazard(prepStudy,'ID','observedAge','hazardPrediction',
+                           cumulativeHazardColumnName='cumulativeHazard',
+                           survivalColumnName='survival',
+                           deathIntensityColumnName='deathIntensity',
+                           parallelCluster=parallelCluster) 
+studyRes <- studyD$details
+head(studyD$expectedLifetime)
+
+
+studyRes %>% dplyr::group_by(group,observedAge) %>%
+  dplyr::summarise(deathIntensity=mean(deathIntensity)) -> plotFrame
+
+# recovered empirical distribution of lifetimes
+ggplot(data=plotFrame,aes(x=observedAge,y=deathIntensity,color=group)) + 
+  geom_line() + ggtitle("GAM splined time surrogate age study") + xlim(c(0,150))
+
+studyRes %>% dplyr::group_by(group,observedAge) %>%
+  dplyr::summarise(hazardPrediction=mean(hazardPrediction)) -> plotFrame
+
+ggplot(data=plotFrame,aes(x=observedAge,y=hazardPrediction,color=group)) + 
+  geom_line() + ggtitle("GAM splined hazard study") + xlim(c(0,150))
+
+studyRes %>% dplyr::group_by(group,observedAge) %>%
+  dplyr::summarise(survival=mean(survival)) -> plotFrameS
+
+ggplot(data=plotFrameS,aes(x=observedAge,y=survival,color=group)) + 
+  geom_line() + ggtitle("GAM splined survival plot") + xlim(c(0,150))
+
+actualFrame <-
+  QSurvival::summarizeActualFrame(dTrain,'group','unobservedLifetime',
+                           parallelCluster=parallelCluster)
+ggplot(data=actualFrame,aes(x=unobservedLifetime,y=survival,color=group)) +
+  geom_line() +  ggtitle("empirical unobserved survival (study)") +
+  xlim(c(0,150))
+
+ggplot() +
+  geom_line(data=plotFrameS,aes(x=observedAge,
+                                y=survival,color=group),linetype=2) +
+  geom_line(data=actualFrame,aes(x=unobservedLifetime,
+                                 y=survival,color=group)) +
+  xlab('age') + 
+  ggtitle("study survival curves (solid actual, dashed fit)")
+```
+
+*****
+
+Out of sample work.
+
+```{r outofsamplework}
+
+testD <- QSurvival::summarizeHazard(prepTest,'ID','observedAge','hazardPrediction',
+                           cumulativeHazardColumnName='cumulativeHazard',
+                           survivalColumnName='survival',
+                           deathIntensityColumnName='deathIntensity') 
+testRes <- testD$details
+head(testD$expectedLifetime)
+
+
+dTestAug <- dTest
+dTestAug$ID <- seq_len(nrow(dTest))
+dTestAug %>% left_join(testD$expectedLifetime,by='ID') -> dTestAug
+
+dTestAug %>% group_by(group) %>% summarize(
+          expectedLifetime=mean(expectedLifetime),
+          unobservedLifetime=mean(unobservedLifetime),
+          observedLifetime=mean(observedLifetime))
+
+ggplot(data=dTestAug,
+       aes(x=expectedLifetime,y=unobservedLifetime,color=group)) + 
+  geom_abline() + geom_point()
+
+```
+
+*****
+
+Standard survival model.
+
+```{r stdsurvival}
+library('survival')
+dTrain$surv <- with(dTrain,Surv(observedLifetime,!censored))
+fit <- survfit(surv~group,
+               data=dTrain,
+               conf.type = "log-log")
+print(fit)
+plot(fit,conf=TRUE,mark.time=TRUE)
+survdiff(surv~group,dTrain)
+```
+
+

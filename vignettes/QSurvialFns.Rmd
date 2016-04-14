@@ -1,0 +1,45 @@
+---
+title: "QSurvival Functions"
+author: "Win-Vector LLC"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{QSurvival Functions}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width=7)
+```
+
+Basic QSurvival functions.
+
+```{r mkdata}
+d <- data.frame(lifetime=c(2,1,2),censored=c(FALSE,FALSE,TRUE))
+print(d)
+```
+
+```{r buildQuasiObsForTraining}
+d2 <- QSurvival::buildQuasiObsForTraining(d,d$lifetime,ifelse(d$censored,NA,d$lifetime),
+    'origRow','sampleAge','deathEvent')
+print(d2)
+```
+
+```{r buildQuasiObsForHoldout}
+QSurvival::buildQuasiObsForComparison(d,5,d$lifetime,ifelse(d$censored,NA,d$lifetime),
+    'origRow','sampleAge','deathEvent')
+```
+
+```{r buildQuasiObsForApplication}
+QSurvival::buildQuasiObsForApplication(d,5,'origRow','sampleAge')
+```
+
+```{r summarizeHazard}
+d2$hazardPred <- 0.1
+QSurvival::summarizeHazard(d2,'origRow','sampleAge','hazardPred',
+    cumulativeHazardColumnName='cumulativeHazard',
+    survivalColumnName='survival',
+    deathIntensityColumnName='deathIntensity')
+```
+

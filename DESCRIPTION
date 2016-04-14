@@ -1,0 +1,20 @@
+Package: QSurvival
+Type: Package
+Title: Quick survival models by data transformation
+Version: 0.1.0
+Author: John Mount, Nina Zumel
+Maintainer: John Mount <jmount@win-vector.com>
+Description: Transform data to allow use of any predictive model for survival modeling.
+License: GPL-3
+LazyData: TRUE
+RoxygenNote: 5.0.1
+Imports: dplyr
+Suggests: knitr,
+    rmarkdown,
+    testthat,
+    ggplot2,
+    mgcv,
+    magrittr,
+    survival,
+    parallel
+VignetteBuilder: knitr

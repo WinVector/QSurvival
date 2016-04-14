@@ -1,0 +1,182 @@
+---
+title: "QSurvival do not group by censor status"
+author: "Win-Vector LLC"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{QSurvival Censoring}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width=7)
+```
+
+
+```{r makedata,echo=FALSE,messages=FALSE,warnings=FALSE,results='hide'}
+suppressWarnings(suppressMessages(library("ggplot2")))
+suppressWarnings(suppressMessages(library('dplyr')))
+suppressWarnings(suppressMessages(library('mgcv')))
+set.seed(32535)
+
+params <- list(groupA=list(k=1.8,lambda=50),
+               groupB=list(k=0.8,lambda=10))
+#plot(dweibull(1:100,shape=params[['groupA']][['k']],
+#              scale=params[['groupA']][['lambda']]))
+#plot(dweibull(1:100,shape=params[['groupB']][['k']],
+#              scale=params[['groupB']][['lambda']]))
+
+censorPoint = 50
+
+mkData <- function(n) {
+  d <- data.frame(group=sample(c('groupA','groupB'),n,replace=TRUE),
+                  stringsAsFactors=FALSE)
+  d$unobservedLifetime <- vapply(seq_len(nrow(d)),
+                                 function(i) {
+                                   max(1,round(rweibull(1,shape=params[[d[i,'group']]][['k']],
+                                                        scale=params[[d[i,'group']]][['lambda']])))
+                                 },
+                                 numeric(1))
+  d$observedLifetime <- pmin(d$unobservedLifetime,censorPoint)
+  d$censored <- d$unobservedLifetime>d$observedLifetime
+  d
+}
+
+
+dTrain <- mkData(200)
+dTest <- mkData(101)
+
+ggplot(dTrain,aes(x=unobservedLifetime,color=group)) +
+  geom_density() + xlim(c(0,150)) + geom_vline(xintercept = censorPoint)
+dTrain %>% dplyr::group_by(group) %>%
+  dplyr::summarise(meanLifetime=mean(unobservedLifetime))
+
+ggplot(dTrain,aes(x=observedLifetime,color=group)) +
+  geom_density() 
+dTrain %>% dplyr::group_by(group) %>%
+  dplyr::summarise(meanLifetime=mean(observedLifetime))
+```
+
+
+
+```{r preparetomodel, echo=FALSE}
+parallelCluster <- c()
+
+## can't run paralle code in vignettes
+#if(requireNamespace("parallel",quietly=TRUE)) {
+#     parallelCluster <- parallel::makeCluster(4)
+#}
+
+ageLimit <- 45
+
+prepTrainFull <- 
+  QSurvival::buildQuasiObsForTraining(dTrain,
+                                      dTrain$observedLifetime,
+                                      ifelse(dTrain$censored,NA,dTrain$observedLifetime),
+                                      'ID','observedAge','deathEvent',
+                                      parallelCluster=parallelCluster)
+# allow windowing further out than training without causing new levels.
+# basically want time as shown to model (if you are showing time to mode)
+# to end will before censoring region to make sure you are not extrapolating
+# off a noisy end estimate.
+prepTrainFull$surrogateAge <- pmin(prepTrainFull$observedAge,ageLimit)
+
+
+obsWindow <- 200
+prepTest <- 
+  QSurvival::buildQuasiObsForComparison(dTest,
+                                     obsWindow,
+                                     dTest$observedLifetime,
+                                     ifelse(dTest$censored,NA,dTest$observedLifetime),
+                                     'ID','observedAge','deathEvent',
+                                     parallelCluster=parallelCluster)
+prepTest$surrogateAge <- pmin(prepTest$observedAge,45)
+
+
+if(!is.null(parallelCluster)) {
+  parallel::stopCluster(parallelCluster)
+  parallelCluster <- NULL
+}
+
+```
+
+*****
+
+Reduced complexity of age portion of model, using spline over surrogate age.
+
+```{r analyzegam}
+# Could use s(observedAge), but using s(surrogateAge) means we don't use
+# the GAM spline to extrapolate.
+# Use degree 2 spline to approximate typical bathtub hazard shape.
+model <- gam(deathEvent~group+s(surrogateAge,k=2),
+             data=prepTrainFull,family=binomial)
+print(summary(model))
+prepTest$hazardPrediction <- as.numeric(predict(model,newdata=prepTest,type='response'))
+
+testD <- QSurvival::summarizeHazard(prepTest,'ID','observedAge','hazardPrediction',
+                           cumulativeHazardColumnName='cumulativeHazard',
+                           survivalColumnName='survival',
+                           deathIntensityColumnName='deathIntensity') 
+testRes <- testD$details
+```
+
+
+*****
+
+Bad estimates when grouping by censored, in particular notice
+the uncensored group (those who died in the observation window)
+have an inflated exepctedLifetime estimate (nearly 30 versus 17).
+This is because estimate[lifetime] can be expanded as
+(ignoring issues of non-independence of estimates);
+(est_prob_censored) estimate[lifetime | censored] +
+   (1-est_prob_censored) estimate[lifetime | not censored]
+So if a non-censored example est_prob_censored is not near 0
+they average in a significant extra lifetime.  Or in frequency terms
+a non-negligible sub-population of the censored instance are inseprable
+from the censored (long-lived) instances.
+
+Roughly: think of the censoring mark as formally not observable just as 
+y outcomes are considered not observable in standard regression.
+
+```{r censoring}
+# look at censored/uncensored issue
+dTestAug <- dTest
+dTestAug$ID <- seq_len(nrow(dTest))
+dTestAug %>% dplyr::left_join(testD$expectedLifetime,by='ID') -> dTestAug
+ggplot(data=dTestAug,aes(x=expectedLifetime,color=censored)) +
+    geom_density(adjust=0.25)
+
+# fairly good agreement when grouping by an observable variable
+dTestAug %>% group_by(group) %>% summarize(
+          expectedLifetime=mean(expectedLifetime),
+          unobservedLifetime=mean(unobservedLifetime),
+          observedLifetime=mean(observedLifetime))
+
+# bad when grouping by censored indicator
+dTestAug %>% group_by(censored) %>% summarize(
+          expectedLifetime=mean(expectedLifetime),
+          unobservedLifetime=mean(unobservedLifetime),
+          observedLifetime=mean(observedLifetime))
+
+
+```
+
+Model on only non-censored data.  Notice we are now close (in expectation).
+
+```{r noncensored}
+prepTrainFullUncensored <- prepTrainFull[!prepTrainFull$censored,]
+prepTestUncensored <- prepTest[!prepTest$censored,]
+model <- gam(deathEvent~group+s(surrogateAge,k=2),
+             data=prepTrainFullUncensored,family=binomial)
+prepTestUncensored$hazardPrediction <- 
+  as.numeric(predict(model,newdata=prepTestUncensored,type='response'))
+testDU <- QSurvival::summarizeHazard(prepTestUncensored,'ID','observedAge','hazardPrediction',
+                           cumulativeHazardColumnName='cumulativeHazard',
+                           survivalColumnName='survival',
+                           deathIntensityColumnName='deathIntensity') 
+summary(testDU$expectedLifetime$expectedLifetime)
+summary(prepTestUncensored$observedLifetime)
+prepTestUncensored %>% group_by(group) %>% summarize(observedLifetime=mean(observedLifetime))
+```
+

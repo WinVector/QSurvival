@@ -1,0 +1,226 @@
+---
+title: "QSurvival Alternatives"
+author: "Win-Vector LLC"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{QSurvival Alternatives}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width=7)
+```
+
+```{r makedata,echo=FALSE,messages=FALSE,warnings=FALSE,results='hide'}
+suppressWarnings(suppressMessages(library("ggplot2")))
+suppressWarnings(suppressMessages(library('dplyr')))
+suppressWarnings(suppressMessages(library('mgcv')))
+set.seed(32535)
+
+params <- list(groupA=list(k=1.8,lambda=50),
+               groupB=list(k=0.8,lambda=10))
+#plot(dweibull(1:100,shape=params[['groupA']][['k']],
+#              scale=params[['groupA']][['lambda']]))
+#plot(dweibull(1:100,shape=params[['groupB']][['k']],
+#              scale=params[['groupB']][['lambda']]))
+
+censorPoint = 50
+
+mkData <- function(n) {
+  d <- data.frame(group=sample(c('groupA','groupB'),n,replace=TRUE),
+                  stringsAsFactors=FALSE)
+  d$unobservedLifetime <- vapply(seq_len(nrow(d)),
+                                 function(i) {
+                                   max(1,round(rweibull(1,shape=params[[d[i,'group']]][['k']],
+                                                        scale=params[[d[i,'group']]][['lambda']])))
+                                 },
+                                 numeric(1))
+  d$observedLifetime <- pmin(d$unobservedLifetime,censorPoint)
+  d$censored <- d$unobservedLifetime>d$observedLifetime
+  d
+}
+
+
+dTrain <- mkData(200)
+dTest <- mkData(101)
+dApplication <- mkData(51)
+
+ggplot(dTrain,aes(x=unobservedLifetime,color=group)) +
+  geom_density() + xlim(c(0,150)) + geom_vline(xintercept = censorPoint)
+dTrain %>% dplyr::group_by(group) %>%
+  dplyr::summarise(meanLifetime=mean(unobservedLifetime))
+
+ggplot(dTrain,aes(x=observedLifetime,color=group)) +
+  geom_density() 
+dTrain %>% dplyr::group_by(group) %>%
+  dplyr::summarise(meanLifetime=mean(observedLifetime))
+```
+
+
+*****
+
+Logistic regression direct hazard method for survival models as in http://data.princeton.edu/wws509/notes/c7.pdf 
+
+```{r preparetomodel}
+parallelCluster <- c()
+
+## can't run paralle code in vignettes
+#if(requireNamespace("parallel",quietly=TRUE)) {
+#     parallelCluster <- parallel::makeCluster(4)
+#}
+
+ageLimit <- 45
+
+prepTrainFull <- 
+  QSurvival::buildQuasiObsForTraining(dTrain,
+                                      dTrain$observedLifetime,
+                                      ifelse(dTrain$censored,NA,dTrain$observedLifetime),
+                                      'ID','observedAge','deathEvent',
+                                      parallelCluster=parallelCluster)
+print(nrow(prepTrainFull))
+# allow windowing further out than training without causing new levels.
+# basically want time as shown to model (if you are showing time to mode)
+# to end will before censoring region to make sure you are not extrapolating
+# off a noisy end estimate.
+prepTrainFull$surrogateAge <- pmin(prepTrainFull$observedAge,ageLimit)
+
+
+# Can sub-sample the quasi events, but results are sensitive to this
+# so you want targetSize to be large.
+prepTrain <- 
+  QSurvival::buildQuasiObsForTraining(dTrain,
+                                      dTrain$observedLifetime,
+                                      ifelse(dTrain$censored,NA,dTrain$observedLifetime),
+                                      'ID','observedAge','deathEvent',
+                                      parallelCluster=parallelCluster,
+                                      targetSize=4000)
+print(nrow(prepTrain))
+# allow windowing further out than training without causing new levels.
+prepTrain$surrogateAge <- pmin(prepTrain$observedAge,ageLimit)
+
+obsWindow <- 200
+prepTest <- 
+  QSurvival::buildQuasiObsForComparison(dTest,
+                                     obsWindow,
+                                     dTest$observedLifetime,
+                                     ifelse(dTest$censored,NA,dTest$observedLifetime),
+                                     'ID','observedAge','deathEvent',
+                                     parallelCluster=parallelCluster)
+prepTest$surrogateAge <- pmin(prepTest$observedAge,45)
+
+prepApp <- 
+  QSurvival::buildQuasiObsForApplication(dApplication,
+                                         obsWindow,
+                                         'ID','observedAge',
+                                         parallelCluster=parallelCluster)
+prepApp$surrogateAge <- pmin(prepApp$observedAge,45)
+
+if(!is.null(parallelCluster)) {
+  parallel::stopCluster(parallelCluster)
+  parallelCluster <- NULL
+}
+
+```
+
+*****
+
+
+```{r analyzeglm}
+model <- glm(deathEvent~0+group+as.factor(surrogateAge),
+             data=prepTrainFull,family=binomial)
+# don't like sub-sampling here as some days are never seen in training causing
+# "novel levels" error in application.
+prepTrainFull$hazardPrediction <- as.numeric(predict(model,
+                                                     newdata=prepTrainFull,
+                                                     type='response'))
+prepTest$hazardPrediction <- as.numeric(predict(model,newdata=prepTest,type='response'))
+prepApp$hazardPrediction <- as.numeric(predict(model,newdata=prepApp,type='response'))
+
+testD <- QSurvival::summarizeHazard(prepTest,'ID','observedAge','hazardPrediction',
+                           cumulativeHazardColumnName='cumulativeHazard',
+                           survivalColumnName='survival',
+                           deathIntensityColumnName='deathIntensity') 
+testRes <- testD$details
+head(testD$expectedLifetime)
+
+testRes %>% dplyr::group_by(group,observedAge) %>%
+  dplyr::summarise(deathIntensity=mean(deathIntensity)) -> plotFrame
+
+# recovered empirical distribution of lifetimes
+ggplot(data=plotFrame,aes(x=observedAge,y=deathIntensity,color=group)) + 
+  geom_line() + ggtitle("detailed GLM") + xlim(c(0,150))
+
+```
+
+*****
+
+Reduced complexity of age portion of model, using spline over surrogate age.
+
+```{r analyzegam}
+# Could use s(observedAge), but using s(surrogateAge) means we don't use
+# the GAM spline to extrapolate.
+# Use degree 2 spline to approximate typical bathtub hazard shape.
+model <- gam(deathEvent~0+group+s(surrogateAge,k=2),
+             data=prepTrain,family=binomial)
+print(summary(model))
+prepTrain$hazardPrediction <- as.numeric(predict(model,newdata=prepTrain,type='response'))
+prepTest$hazardPrediction <- as.numeric(predict(model,newdata=prepTest,type='response'))
+prepApp$hazardPrediction <- as.numeric(predict(model,newdata=prepApp,type='response'))
+
+testD <- QSurvival::summarizeHazard(prepTest,'ID','observedAge','hazardPrediction',
+                           cumulativeHazardColumnName='cumulativeHazard',
+                           survivalColumnName='survival',
+                           deathIntensityColumnName='deathIntensity') 
+testRes <- testD$details
+head(testD$expectedLifetime)
+
+testRes %>% dplyr::group_by(group,observedAge) %>%
+  dplyr::summarise(deathIntensity=mean(deathIntensity)) -> plotFrame
+
+# recovered empirical distribution of lifetimes
+ggplot(data=plotFrame,aes(x=observedAge,y=deathIntensity,color=group)) + 
+  geom_line() + ggtitle("GAM splined time surrogate age") + xlim(c(0,150))
+
+testRes %>% dplyr::group_by(group,observedAge) %>%
+  dplyr::summarise(hazardPrediction=mean(hazardPrediction)) -> plotFrame
+
+# recovered empirical distribution of lifetimes
+ggplot(data=plotFrame,aes(x=observedAge,y=hazardPrediction,color=group)) + 
+  geom_line() + ggtitle("GAM splined hazard") + xlim(c(0,150))
+```
+
+
+*****
+
+
+No age model.
+
+```{r noage}
+# Could use s(observedAge), but using s(surrogateAge) means we don't use
+# the GAM spline to extrapolate.
+model <- glm(deathEvent~0+group,data=prepTrain,family=binomial)
+print(summary(model))
+prepTrain$hazardPrediction <- predict(model,newdata=prepTrain,type='response')
+prepTest$hazardPrediction <- predict(model,newdata=prepTest,type='response')
+prepApp$hazardPrediction <- predict(model,newdata=prepApp,type='response')
+
+testD <- QSurvival::summarizeHazard(prepTest,'ID','observedAge','hazardPrediction',
+                           cumulativeHazardColumnName='cumulativeHazard',
+                           survivalColumnName='survival',
+                           deathIntensityColumnName='deathIntensity') 
+testRes <- testD$details
+head(testD$expectedLifetime)
+
+testRes %>% dplyr::group_by(group,observedAge) %>%
+  dplyr::summarise(deathIntensity=mean(deathIntensity)) -> plotFrame
+
+ggplot(data=plotFrame,aes(x=observedAge,y=deathIntensity,color=group)) + 
+  geom_line() + ggtitle("GLM no time") + xlim(c(0,150))
+```
+
+
+
+
+
