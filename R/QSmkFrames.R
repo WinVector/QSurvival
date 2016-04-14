@@ -10,16 +10,18 @@
 #' @param idColumnName character scalar, column to write original row ids in
 #' @param indexColumnName character scalar, column to write quasi event indices into
 #' @param eventColumnName character scalar, column to write quasi events indicator into.  If NA, write no such column.
-#' @param naAfterEvent logical scalar, if TRUE write NA after event step in eventColumnName.
 #' @param parallelCluster, if not NULL parallel cluster to perform the work.
 #' @param targetSize numeric scalar, if not NA target size for a uniform sample of the quasi observations.
+#' @param forceEvent logical scalar, if true force conversion events into sample
+#' @param weightsColumnName if not NULL column to write sampling weights in
 #'
 #' @importFrom dplyr bind_rows
 buildQuasiObs <- function(d,observationWindowWidth,
                           numberOfObservations,eventIndex,
                           idColumnName,
                           indexColumnName,eventColumnName,
-                          naAfterEvent,parallelCluster,targetSize) {
+                          parallelCluster=NULL,
+                          targetSize=NA,forceEvent=FALSE,weightsColumnName=NULL) {
   # check args
   if(!("data.frame" %in% class(d))) {
     stop("buildQuasiObs d must be a data.frame")
@@ -51,9 +53,9 @@ buildQuasiObs <- function(d,observationWindowWidth,
                        numberOfObservations,eventIndex,
                        idColumnName,
                        indexColumnName,eventColumnName,
-                       naAfterEvent,
                        windowSizes,
-                       genProb) {
+                       genProb,
+                       forceEvent,weightsColumnName) {
     force(d)
     force(observationWindowWidth)
     force(numberOfObservations)
@@ -61,9 +63,10 @@ buildQuasiObs <- function(d,observationWindowWidth,
     force(idColumnName)
     force(indexColumnName)
     force(eventColumnName)
-    force(naAfterEvent)
     force(windowSizes)
     force(genProb)
+    force(forceEvent)
+    force(weightsColumnName)
     function(i) {
       ni <- numberOfObservations[[i]]
       ei <- eventIndex[[i]]
@@ -71,6 +74,12 @@ buildQuasiObs <- function(d,observationWindowWidth,
       if(genProb<1) {
         probs <- runif(length(indices))
         indices <- indices[probs<=genProb]
+        weights <- rep(1/genProb,length(indices))
+        if( forceEvent && (!is.na(ei))&&(ei>=1)&&(ei<=ni)) {
+          indices <- sort(union(indices,ei))
+          weights <- rep(1/genProb,length(indices))
+          weights[which(indices==ei)] <- 1.0
+        }
       }
       if(length(indices)<=0) {
         return(NULL)
@@ -78,7 +87,9 @@ buildQuasiObs <- function(d,observationWindowWidth,
       di <- d[rep(i,length(indices)),,drop=FALSE]
       di[[idColumnName]] <- i
       di[[indexColumnName]] <- indices
-      # TODO: option to stratify on event=TRUE or not.
+      if(!is.null(weightsColumnName)) {
+        di[[weightsColumnName]] <- weights
+      }
       if(!is.na(eventColumnName)) {
         di[[eventColumnName]] <- NA
         # everything in obs window or before event is FALSE
@@ -109,9 +120,9 @@ buildQuasiObs <- function(d,observationWindowWidth,
                  numberOfObservations,eventIndex,
                  idColumnName,
                  indexColumnName,eventColumnName,
-                 naAfterEvent,
                  windowSizes,
-                 genProb)
+                 genProb,
+                 forceEvent,weightsColumnName)
   if(is.null(parallelCluster) || (!requireNamespace("parallel",quietly=TRUE))) {
     dlist <- lapply(seq_len(n),fi)
   } else {
@@ -134,6 +145,8 @@ buildQuasiObs <- function(d,observationWindowWidth,
 #' @param eventColumnName character scalar, column to write quasi events indicator into.  If NA, write no such column.
 #' @param parallelCluster, if not NULL parallel cluster to perform the work.
 #' @param targetSize numeric scalar, if not NA target size for a uniform sample of the quasi observations.  This should be a very large number.
+#' @param forceEvent logical scalar, if true force conversion events into sample
+#' @param weightsColumnName if not NULL column to write sampling weights in
 #'
 #' @examples
 #'
@@ -145,13 +158,16 @@ buildQuasiObs <- function(d,observationWindowWidth,
 buildQuasiObsForTraining <- function(d,numberOfObservations,eventIndex,
                                      idColumnName,
                                      indexColumnName,eventColumnName,
-                                     parallelCluster=NULL,targetSize=NA) {
+                                     parallelCluster=NULL,
+                                     targetSize=NA,
+                                     forceEvent=FALSE,weightsColumnName=NULL) {
   buildQuasiObs(d,1,
                 numberOfObservations,eventIndex,
                 idColumnName,
                 indexColumnName,eventColumnName,
-                naAfterEvent=FALSE,parallelCluster=parallelCluster,
-                targetSize=targetSize)
+                parallelCluster=parallelCluster,
+                targetSize=targetSize,
+                forceEvent=forceEvent,weightsColumnName=weightsColumnName)
 }
 
 
@@ -187,7 +203,7 @@ buildQuasiObsForComparison <- function(d,observationWindowWidth,
                 numberOfObservations,eventIndex,
                 idColumnName,
                 indexColumnName,eventColumnName,
-                naAfterEvent=TRUE,parallelCluster=parallelCluster,targetSize=NA)
+                parallelCluster=parallelCluster,targetSize=NA)
 }
 
 #' Expand discrete time survival data into quasi observations on application data.
@@ -219,7 +235,7 @@ buildQuasiObsForApplication <- function(d,observationWindowWidth,
                 observationWindowWidth,NA,
                 idColumnName,
                 indexColumnName,NA,
-                naAfterEvent=TRUE,parallelCluster=parallelCluster,targetSize=NA)
+                parallelCluster=parallelCluster,targetSize=NA)
 }
 
 

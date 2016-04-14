@@ -53,20 +53,13 @@ library('QSurvival')
 timecut <- 2750
 dTrain <- buildQuasiObsForTraining(col1, 
                                    col1$time, ifelse(col1$status==1,col1$time,NA), 'id',
-                                   'days', 'recurrence')
+                                   'days', 'recurrence',
+                                   targetSize=10000,forceEvent=TRUE,weightsColumnName='wts')
 dTrain$cappedDays <- pmin(timecut,dTrain$days)
-# sample down to speed up fitting, but keep rare events
-dTrainPos <- dTrain[dTrain$recurrence,]
-dTrainPos$wts <- 1.0
-dTrainNeg <- dTrain[!dTrain$recurrence,]
-origNegSize <- nrow(dTrainNeg)
-dTrainNeg <- dTrainNeg[sample.int(origNegSize,10000),]
-dTrainNeg$wts <- origNegSize/nrow(dTrainNeg)
-dTrainSample <- rbind(dTrainPos,dTrainNeg)
-model <- gam(recurrence~s(age,by=sex)+sex+s(nodes)+perfor+rx+obstruct+adhere+s(cappedDays),
-         family=binomial,data=dTrainSample,weights=wts)
-summary(model)
 
+model <- gam(recurrence~s(age,by=sex)+sex+s(nodes)+perfor+rx+obstruct+adhere+s(cappedDays),
+         family=binomial,data=dTrain,weights=wts)
+summary(model)
 
 colJ <- col1[j,]
 
