@@ -1,0 +1,75 @@
+---
+title: "MGCV example"
+author: "Win-Vector LLC"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{QSurvival on AIDS Data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(fig.width=7)
+```
+
+From help(cox.ph) in mgcv.
+
+
+```{r mgcvexample}
+library(mgcv)
+library(survival) ## for data
+library("ggplot2")
+
+col1 <- colon[colon$etype==1,] ## concentrate on single event
+col1$differ <- as.factor(col1$differ)
+col1$sex <- as.factor(col1$sex)
+
+b <- gam(time~s(age,by=sex)+sex+s(nodes)+perfor+rx+obstruct+adhere,
+         family=cox.ph(),data=col1,weights=status)
+
+summary(b) 
+
+
+## plot survival function for patient j...
+
+np <- 300;j <- 6
+newd <- data.frame(time=seq(0,3000,length=np))
+dname <- names(col1)
+for (n in dname) newd[[n]] <- rep(col1[[n]][j],np)
+newd$time <- seq(0,3000,length=np)
+fv <- predict(b,newdata=newd,type="response",se=TRUE)
+newd$survival <- fv$fit
+newd$survivalU <- fv$fit+2*fv$se.fit
+newd$survivalL <- pmax(0,fv$fit-2*fv$se.fit)
+ggplot(data=newd,mapping=aes(x=time,y=survival,ymin=survivalL,ymax=survivalU)) +
+  geom_line() + geom_ribbon(alpha=0.5)
+```
+
+
+```{r quasiobs}
+library('QSurvival')
+
+dTrain <- buildQuasiObsForTraining(col1, 
+                                   col1$time, ifelse(col1$status==1,col1$time,NA), 'id',
+                                   'days', 'recurrence',targetSize=100000)
+model <- gam(recurrence~s(age,by=sex)+sex+s(nodes)+perfor+rx+obstruct+adhere+s(days),
+         family=binomial,data=dTrain)
+summary(model)
+
+
+colJ <- col1[j,]
+
+dRes <- buildQuasiObsForComparison(colJ, 
+                                    3000,
+                                   colJ$age, ifelse(colJ$status==1,col1$age,NA), 'id',
+                                   'days', 'recurrence')
+dRes$hazard <- predict(model,newdata=dRes,type='response')
+dPlot <- QSurvival::summarizeHazard(dRes,'id','days','hazard',
+                           cumulativeHazardColumnName='cumulativeHazard',
+                           survivalColumnName='pclean',
+                           deathIntensityColumnName='recurrenceIntensity') 
+
+ggplot(data=dPlot$details,mapping=aes(x=days,y=pclean)) +
+  geom_line()
+```
