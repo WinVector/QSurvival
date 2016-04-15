@@ -73,19 +73,10 @@ dRes$hazard <- as.numeric(pred$fit)
 # Note: note the same error-bar method as the literature!
 dRes$hazardU <- as.numeric(pred$fit+2*pred$se.fit)
 dRes$hazardL <- pmax(0,pred$fit-2*pred$se.fit)
-dPlotM <- QSurvival::summarizeHazard(dRes,'id','days','hazard',
-                           survivalColumnName='pclean',
-                           deathIntensityColumnName='recurrenceIntensity') 
-dPlotU <- QSurvival::summarizeHazard(dRes,'id','days','hazardU',
-                           survivalColumnName='pcleanU',
-                           deathIntensityColumnName='recurrenceIntensityU') 
-dPlotL <- QSurvival::summarizeHazard(dRes,'id','days','hazardL',
-                           survivalColumnName='pcleanL',
-                           deathIntensityColumnName='recurrenceIntensityL')
-dPlot <- dPlotM$details
-dPlot$pcleanU <- dPlotU$details$pcleanU
-dPlot$pcleanL <- dPlotL$details$pcleanL
+dPlot <- QSurvival::summarizeHazard(dRes,'id','days',
+                                     c('hazard','hazardU','hazardL'),
+                                     survivalColumnName=c('pclean','pcleanU','pcleanL')) 
 
-ggplot(data=dPlot,mapping=aes(x=days,y=pclean,ymin=pcleanL,ymax=pcleanU)) +
+ggplot(data=dPlot$details,mapping=aes(x=days,y=pclean,ymin=pcleanL,ymax=pcleanU)) +
   geom_line() + geom_ribbon(alpha=0.5,fill='blue')
 ```

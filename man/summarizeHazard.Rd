@@ -5,9 +5,9 @@
 \title{Convert hazard to survival function and instantaneous
 event intensities.}
 \usage{
-summarizeHazard(d, idColumnName, indexColumnName, hazardColumnName,
-  survivalColumnName = "survival",
-  deathIntensityColumnName = "deathIntensity", parallelCluster = NULL)
+summarizeHazard(d, idColumnName, indexColumnName, hazardColumnNames,
+  survivalColumnNames = "survival", deathIntensityColumnNames = NULL,
+  parallelCluster = NULL)
 }
 \arguments{
 \item{d}{data.frame}
@@ -16,11 +16,11 @@ summarizeHazard(d, idColumnName, indexColumnName, hazardColumnName,
 
 \item{indexColumnName}{character scalar, column containing quasi event indices}
 
-\item{hazardColumnName}{character scalar, column containing hazard scores}
+\item{hazardColumnNames}{character vector, columns containing hazard scores}
 
-\item{survivalColumnName}{character scalar, column to write survival probability in}
+\item{survivalColumnNames}{character vector, columns to write survival probability in}
 
-\item{deathIntensityColumnName}{character scalar, column to write death intensities}
+\item{deathIntensityColumnNames}{vector scalar, columns to write death intensities}
 
 \item{parallelCluster}{optional parallel cluster to run on}
 }

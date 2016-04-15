@@ -71,10 +71,13 @@ adataT$hazard = as.numeric(predict(model, newdata=adataT, type="response"))
 
 # build the individual level hazard and survival curves
 summaries = summarizeHazard(adataT, "rowid", "timestep", "hazard",
+                            survivalColumnNames = "survival",
+                            deathIntensityColumnNames='deathIntensity',
                                   parallelCluster=parallelCluster)
 
 # frame of curves
-curves = summaries$details[, c("rowid", "timestep", "hazard", "survival", "deathIntensity")]
+curves = summaries$details[, c("rowid", "timestep", "survival", 
+                              "hazard","deathIntensity")]
 
 # join the treatment information to the curves
 curves = dplyr::inner_join(curves, adataT[, c('rowid', 'timestep', 'treatment_idv')], by=c("rowid", "timestep"))

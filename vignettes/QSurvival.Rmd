@@ -191,14 +191,15 @@ Out of sample work.
 ```{r outofsamplework}
 
 testD <- QSurvival::summarizeHazard(prepTest,'ID','observedAge','hazardPrediction',
-                           survivalColumnName='survival',
-                           deathIntensityColumnName='deathIntensity') 
+                           survivalColumnNames='survival',
+                           deathIntensityColumnNames='deathIntensity') 
 testRes <- testD$details
 head(testD$expectedLifetime)
 
 
 dTestAug <- dTest
 dTestAug$ID <- seq_len(nrow(dTest))
+colnames(testD$expectedLifetime) <- c('ID','expectedLifetime')
 dTestAug %>% left_join(testD$expectedLifetime,by='ID') -> dTestAug
 
 dTestAug %>% group_by(group) %>% summarize(

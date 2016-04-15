@@ -129,7 +129,7 @@ buildQuasiObs <- function(d,observationWindowWidth,
     dlist <- parallel::parLapply(parallelCluster,seq_len(n),fi)
   }
   dlist <- Filter(function(di) {!is.null(di)},dlist)
-  dplyr::bind_rows(dlist)
+  as.data.frame(dplyr::bind_rows(dlist),stringsAsFactors=FALSE)
 }
 
 

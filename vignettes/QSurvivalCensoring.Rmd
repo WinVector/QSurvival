@@ -142,6 +142,7 @@ y outcomes are considered not observable in standard regression.
 # look at censored/uncensored issue
 dTestAug <- dTest
 dTestAug$ID <- seq_len(nrow(dTest))
+colnames(testD$expectedLifetime) <- c('ID','expectedLifetime')
 dTestAug %>% dplyr::left_join(testD$expectedLifetime,by='ID') -> dTestAug
 ggplot(data=dTestAug,aes(x=expectedLifetime,color=censored)) +
     geom_density(adjust=0.25)

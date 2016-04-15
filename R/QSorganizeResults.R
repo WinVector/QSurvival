@@ -8,9 +8,9 @@
 #' @param d data.frame
 #' @param idColumnName character scalar, column containing original row ids
 #' @param indexColumnName character scalar, column containing quasi event indices
-#' @param hazardColumnName character scalar, column containing hazard scores
-#' @param survivalColumnName character scalar, column to write survival probability in
-#' @param deathIntensityColumnName character scalar, column to write death intensities
+#' @param hazardColumnNames character vector, columns containing hazard scores
+#' @param survivalColumnNames character vector, columns to write survival probability in
+#' @param deathIntensityColumnNames vector scalar, columns to write death intensities
 #' @param parallelCluster optional parallel cluster to run on
 #' @return list, details=survival data.frame, expectedLifetime has lifetime estimates
 #'
@@ -27,45 +27,66 @@
 #'
 #' @importFrom dplyr bind_rows
 #' @export
-summarizeHazard <- function(d,idColumnName,indexColumnName,hazardColumnName,
-                      survivalColumnName='survival',
-                      deathIntensityColumnName='deathIntensity',
-                      parallelCluster=NULL) {
+summarizeHazard <- function(d,idColumnName,indexColumnName,
+                            hazardColumnNames,
+                            survivalColumnNames='survival',
+                            deathIntensityColumnNames=NULL,
+                            parallelCluster=NULL) {
+  if(length(hazardColumnNames)!=length(survivalColumnNames)) {
+    stop('summarizeHazard must have length(hazardColumnNames)==length(survivalColumnNames)')
+  }
+  if((!is.null(deathIntensityColumnNames))&&
+     (length(hazardColumnNames)!=length(deathIntensityColumnNames))) {
+    stop('summarizeHazard must have length(hazardColumnNames)==length(deathIntensityColumnNames)')
+  }
   dlist <- split(d,d[[idColumnName]])
   mkWorker <- function(idColumnName,
-                        indexColumnName,
-                        hazardColumnName,
-                        survivalColumnName,
-                        deathIntensityColumnName) {
+                       indexColumnName,
+                       hazardColumnNames,
+                       survivalColumnNames,
+                       deathIntensityColumnNames) {
     force(idColumnName)
     force(indexColumnName)
-    force(hazardColumnName)
-    force(survivalColumnName)
-    force(deathIntensityColumnName)
+    force(hazardColumnNames)
+    force(survivalColumnNames)
+    force(deathIntensityColumnNames)
     function(di) {
-      di <- di[order(di[[indexColumnName]]),]
-      di[[survivalColumnName]] <- cumprod(pmax(0,1-pmin(1,di[[hazardColumnName]])))
-      before <- c(1,di[[survivalColumnName]])
-      before <- before[-length(before)]
-      di[[deathIntensityColumnName]] <-  before - di[[survivalColumnName]]
-      di[['expectedLifetime']] <- sum(di[[survivalColumnName]])
+      for(j in seq_len(length(hazardColumnNames))) {
+        scn <- survivalColumnNames[[j]]
+        hcn <- hazardColumnNames[[j]]
+        di[[scn]] <- cumprod(pmax(0,1-pmin(1,di[[hcn]])))
+        before <- c(1,di[[scn]])
+        before <- before[-length(before)]
+        if(!is.null(deathIntensityColumnNames)) {
+          din <- deathIntensityColumnNames[[j]]
+          di[[din]] <-  before - di[[scn]]
+        }
+      }
       di
     }
   }
   worker <- mkWorker(idColumnName,
                      indexColumnName,
-                     hazardColumnName,
-                     survivalColumnName,
-                     deathIntensityColumnName)
+                     hazardColumnNames,
+                     survivalColumnNames,
+                     deathIntensityColumnNames)
   if(is.null(parallelCluster) || (!requireNamespace("parallel",quietly=TRUE))) {
     dlist <- lapply(dlist,worker)
   } else {
     dlist <- parallel::parLapply(parallelCluster,dlist,worker)
   }
-  dH <- dplyr::bind_rows(dlist)
-  expectedLifetime <- aggregate(as.formula(paste('expectedLifetime ~ ',idColumnName)),
-                                data=dH,FUN=mean)
-  dH[['expectedLifetime']] <- NULL
+  dH <- as.data.frame(dplyr::bind_rows(dlist),stringsAsFactors=FALSE)
+  expectedLifetime <- lapply(dlist,function(di) {
+    ri <- data.frame(di[1,idColumnName],
+                     stringsAsFactors = FALSE)
+    colnames(ri) <- idColumnName
+    for(j in seq_len(length(survivalColumnNames))) {
+      scn <- survivalColumnNames[[j]]
+      ri[[scn]] <- sum(di[[scn]])
+    }
+    ri
+  })
+  expectedLifetime <- as.data.frame(dplyr::bind_rows(expectedLifetime),stringsAsFactors=FALSE)
   list(details=dH,expectedLifetime=expectedLifetime)
 }
 
@@ -94,7 +115,7 @@ summarizeActual <- function(ages,range) {
   res <- data.frame(age=0:range)
   count <- numeric(range+1)
   count[ages$age+1] <- ages$Freq
-  data.frame(age=0:range,count=(tot - cumsum(count))/tot)
+  data.frame(age=0:range,count=(tot - cumsum(count))/tot,stringsAsFactors=FALSE)
 }
 
 #' Build observed survival curves for a frame.  Do NOT use this on censored data (as all ages are interpreted as end).
@@ -134,5 +155,5 @@ summarizeActualFrame <- function(d,groupColumnName,ageColumnName,
     reslist <- parallel::parLapply(parallelCluster,dlist,worker)
   }
   res <- dplyr::bind_rows(reslist)
-  res
+  as.data.frame(res,stringsAsFactors=FALSE)
 }
