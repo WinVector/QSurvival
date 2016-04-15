@@ -39,11 +39,11 @@ dname <- names(col1)
 for (n in dname) newd[[n]] <- rep(col1[[n]][j],np)
 newd$time <- seq(0,3000,length=np)
 fv <- predict(b,newdata=newd,type="response",se=TRUE)
-newd$survival <- fv$fit
-newd$survivalU <- fv$fit+2*fv$se.fit
+newd$survival <- as.numeric(fv$fit)
+newd$survivalU <- as.numeric(fv$fit+2*fv$se.fit)
 newd$survivalL <- pmax(0,fv$fit-2*fv$se.fit)
 ggplot(data=newd,mapping=aes(x=time,y=survival,ymin=survivalL,ymax=survivalU)) +
-  geom_line() + geom_ribbon(alpha=0.5)
+  geom_line() + geom_ribbon(alpha=0.5,fill='blue')
 ```
 
 
@@ -54,7 +54,7 @@ timecut <- 2750
 dTrain <- buildQuasiObsForTraining(col1, 
                                    col1$time, ifelse(col1$status==1,col1$time,NA), 'id',
                                    'days', 'recurrence',
-                                   targetSize=10000,forceEvent=TRUE,weightsColumnName='wts')
+                                   targetSize=20000,forceEvent=TRUE,weightsColumnName='wts')
 dTrain$cappedDays <- pmin(timecut,dTrain$days)
 
 model <- gam(recurrence~s(age,by=sex)+sex+s(nodes)+perfor+rx+obstruct+adhere+s(cappedDays),
@@ -68,12 +68,27 @@ dRes <- buildQuasiObsForComparison(colJ,
                                    colJ$age, ifelse(colJ$status==1,col1$age,NA), 'id',
                                    'days', 'recurrence')
 dRes$cappedDays <- pmin(timecut,dRes$days)
-dRes$hazard <- predict(model,newdata=dRes,type='response')
-dPlot <- QSurvival::summarizeHazard(dRes,'id','days','hazard',
+pred <- predict(model,newdata=dRes,type='response',se=TRUE)
+dRes$hazard <- as.numeric(pred$fit)
+# Note: note the same error-bar method as the literature!
+dRes$hazardU <- as.numeric(pred$fit+2*pred$se.fit)
+dRes$hazardL <- pmax(0,pred$fit-2*pred$se.fit)
+dPlotM <- QSurvival::summarizeHazard(dRes,'id','days','hazard',
                            cumulativeHazardColumnName='cumulativeHazard',
                            survivalColumnName='pclean',
                            deathIntensityColumnName='recurrenceIntensity') 
+dPlotU <- QSurvival::summarizeHazard(dRes,'id','days','hazardU',
+                           cumulativeHazardColumnName='cumulativeHazardU',
+                           survivalColumnName='pcleanU',
+                           deathIntensityColumnName='recurrenceIntensityU') 
+dPlotL <- QSurvival::summarizeHazard(dRes,'id','days','hazardL',
+                           cumulativeHazardColumnName='cumulativeHazardL',
+                           survivalColumnName='pcleanL',
+                           deathIntensityColumnName='recurrenceIntensityL')
+dPlot <- dPlotM$details
+dPlot$pcleanU <- dPlotU$details$pcleanU
+dPlot$pcleanL <- dPlotL$details$pcleanL
 
-ggplot(data=dPlot$details,mapping=aes(x=days,y=pclean)) +
-  geom_line()
+ggplot(data=dPlot,mapping=aes(x=days,y=pclean,ymin=pcleanL,ymax=pcleanU)) +
+  geom_line() + geom_ribbon(alpha=0.5,fill='blue')
 ```
