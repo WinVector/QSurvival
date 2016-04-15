@@ -74,15 +74,12 @@ dRes$hazard <- as.numeric(pred$fit)
 dRes$hazardU <- as.numeric(pred$fit+2*pred$se.fit)
 dRes$hazardL <- pmax(0,pred$fit-2*pred$se.fit)
 dPlotM <- QSurvival::summarizeHazard(dRes,'id','days','hazard',
-                           cumulativeHazardColumnName='cumulativeHazard',
                            survivalColumnName='pclean',
                            deathIntensityColumnName='recurrenceIntensity') 
 dPlotU <- QSurvival::summarizeHazard(dRes,'id','days','hazardU',
-                           cumulativeHazardColumnName='cumulativeHazardU',
                            survivalColumnName='pcleanU',
                            deathIntensityColumnName='recurrenceIntensityU') 
 dPlotL <- QSurvival::summarizeHazard(dRes,'id','days','hazardL',
-                           cumulativeHazardColumnName='cumulativeHazardL',
                            survivalColumnName='pcleanL',
                            deathIntensityColumnName='recurrenceIntensityL')
 dPlot <- dPlotM$details

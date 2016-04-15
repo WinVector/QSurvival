@@ -74,7 +74,7 @@ summaries = summarizeHazard(adataT, "rowid", "timestep", "hazard",
                                   parallelCluster=parallelCluster)
 
 # frame of curves
-curves = summaries$details[, c("rowid", "timestep", "hazard", "cumulativeHazard", "survival", "deathIntensity")]
+curves = summaries$details[, c("rowid", "timestep", "hazard", "survival", "deathIntensity")]
 
 # join the treatment information to the curves
 curves = dplyr::inner_join(curves, adataT[, c('rowid', 'timestep', 'treatment_idv')], by=c("rowid", "timestep"))

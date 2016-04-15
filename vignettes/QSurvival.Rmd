@@ -142,7 +142,6 @@ prepApp$hazardPrediction <- as.numeric(predict(model,newdata=prepApp,type='respo
 
 ```{r plotstudy}
 studyD <- QSurvival::summarizeHazard(prepStudy,'ID','observedAge','hazardPrediction',
-                           cumulativeHazardColumnName='cumulativeHazard',
                            survivalColumnName='survival',
                            deathIntensityColumnName='deathIntensity',
                            parallelCluster=parallelCluster) 
@@ -192,7 +191,6 @@ Out of sample work.
 ```{r outofsamplework}
 
 testD <- QSurvival::summarizeHazard(prepTest,'ID','observedAge','hazardPrediction',
-                           cumulativeHazardColumnName='cumulativeHazard',
                            survivalColumnName='survival',
                            deathIntensityColumnName='deathIntensity') 
 testRes <- testD$details

@@ -139,7 +139,6 @@ prepTest$hazardPrediction <- as.numeric(predict(model,newdata=prepTest,type='res
 prepApp$hazardPrediction <- as.numeric(predict(model,newdata=prepApp,type='response'))
 
 testD <- QSurvival::summarizeHazard(prepTest,'ID','observedAge','hazardPrediction',
-                           cumulativeHazardColumnName='cumulativeHazard',
                            survivalColumnName='survival',
                            deathIntensityColumnName='deathIntensity') 
 testRes <- testD$details
@@ -170,7 +169,6 @@ prepTest$hazardPrediction <- as.numeric(predict(model,newdata=prepTest,type='res
 prepApp$hazardPrediction <- as.numeric(predict(model,newdata=prepApp,type='response'))
 
 testD <- QSurvival::summarizeHazard(prepTest,'ID','observedAge','hazardPrediction',
-                           cumulativeHazardColumnName='cumulativeHazard',
                            survivalColumnName='survival',
                            deathIntensityColumnName='deathIntensity') 
 testRes <- testD$details
@@ -207,7 +205,6 @@ prepTest$hazardPrediction <- predict(model,newdata=prepTest,type='response')
 prepApp$hazardPrediction <- predict(model,newdata=prepApp,type='response')
 
 testD <- QSurvival::summarizeHazard(prepTest,'ID','observedAge','hazardPrediction',
-                           cumulativeHazardColumnName='cumulativeHazard',
                            survivalColumnName='survival',
                            deathIntensityColumnName='deathIntensity') 
 testRes <- testD$details

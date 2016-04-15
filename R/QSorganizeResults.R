@@ -1,6 +1,6 @@
 
 
-#' Convert hazard to cumulative hazard, survival function, and instantaneous
+#' Convert hazard to survival function and instantaneous
 #' event intensities.
 #'
 #' Sums up hazard function grouped by original ID variable ordered by step.
@@ -9,11 +9,10 @@
 #' @param idColumnName character scalar, column containing original row ids
 #' @param indexColumnName character scalar, column containing quasi event indices
 #' @param hazardColumnName character scalar, column containing hazard scores
-#' @param cumulativeHazardColumnName character scalar, column to write cumulative hazard
 #' @param survivalColumnName character scalar, column to write survival probability in
 #' @param deathIntensityColumnName character scalar, column to write death intensities
 #' @param parallelCluster optional parallel cluster to run on
-#' @return list, details=cumulative hazard data.frame, expectedLifetime has lifetime estimates
+#' @return list, details=survival data.frame, expectedLifetime has lifetime estimates
 #'
 #' @examples
 #'
@@ -22,7 +21,6 @@
 #'    'origRow','sampleAge','deathEvent')
 #' d2$hazardPred <- 0.1
 #' summarizeHazard(d2,'origRow','sampleAge','hazardPred',
-#'    cumulativeHazardColumnName='cumulativeHazard',
 #'    survivalColumnName='survival',
 #'    deathIntensityColumnName='deathIntensity')
 #'
@@ -30,7 +28,6 @@
 #' @importFrom dplyr bind_rows
 #' @export
 summarizeHazard <- function(d,idColumnName,indexColumnName,hazardColumnName,
-                      cumulativeHazardColumnName='cumulativeHazard',
                       survivalColumnName='survival',
                       deathIntensityColumnName='deathIntensity',
                       parallelCluster=NULL) {
@@ -38,19 +35,16 @@ summarizeHazard <- function(d,idColumnName,indexColumnName,hazardColumnName,
   mkWorker <- function(idColumnName,
                         indexColumnName,
                         hazardColumnName,
-                        cumulativeHazardColumnName,
                         survivalColumnName,
                         deathIntensityColumnName) {
     force(idColumnName)
     force(indexColumnName)
     force(hazardColumnName)
-    force(cumulativeHazardColumnName)
     force(survivalColumnName)
     force(deathIntensityColumnName)
     function(di) {
       di <- di[order(di[[indexColumnName]]),]
-      di[[cumulativeHazardColumnName]] <- cumsum(di[[hazardColumnName]])
-      di[[survivalColumnName]] <- exp(-di[[cumulativeHazardColumnName]])
+      di[[survivalColumnName]] <- cumprod(pmax(0,1-pmin(1,di[[hazardColumnName]])))
       before <- c(1,di[[survivalColumnName]])
       before <- before[-length(before)]
       di[[deathIntensityColumnName]] <-  before - di[[survivalColumnName]]
@@ -61,7 +55,6 @@ summarizeHazard <- function(d,idColumnName,indexColumnName,hazardColumnName,
   worker <- mkWorker(idColumnName,
                      indexColumnName,
                      hazardColumnName,
-                     cumulativeHazardColumnName,
                      survivalColumnName,
                      deathIntensityColumnName)
   if(is.null(parallelCluster) || (!requireNamespace("parallel",quietly=TRUE))) {

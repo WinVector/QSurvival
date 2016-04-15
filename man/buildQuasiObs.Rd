@@ -5,8 +5,8 @@
 \title{Expand discrete time survival data into quasi observations.}
 \usage{
 buildQuasiObs(d, observationWindowWidth, numberOfObservations, eventIndex,
-  idColumnName, indexColumnName, eventColumnName, naAfterEvent, parallelCluster,
-  targetSize)
+  idColumnName, indexColumnName, eventColumnName, parallelCluster = NULL,
+  targetSize = NA, forceEvent = FALSE, weightsColumnName = NULL)
 }
 \arguments{
 \item{d}{data.frame to expand}
@@ -23,11 +23,13 @@ buildQuasiObs(d, observationWindowWidth, numberOfObservations, eventIndex,
 
 \item{eventColumnName}{character scalar, column to write quasi events indicator into.  If NA, write no such column.}
 
-\item{naAfterEvent}{logical scalar, if TRUE write NA after event step in eventColumnName.}
-
 \item{parallelCluster, }{if not NULL parallel cluster to perform the work.}
 
 \item{targetSize}{numeric scalar, if not NA target size for a uniform sample of the quasi observations.}
+
+\item{forceEvent}{logical scalar, if true force conversion events into sample}
+
+\item{weightsColumnName}{if not NULL column to write sampling weights in}
 }
 \description{
 This function assumes time starts at 1 and counts unit increments.

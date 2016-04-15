@@ -38,7 +38,6 @@ QSurvival::buildQuasiObsForApplication(d,5,'origRow','sampleAge')
 ```{r summarizeHazard}
 d2$hazardPred <- 0.1
 QSurvival::summarizeHazard(d2,'origRow','sampleAge','hazardPred',
-    cumulativeHazardColumnName='cumulativeHazard',
     survivalColumnName='survival',
     deathIntensityColumnName='deathIntensity')
 ```

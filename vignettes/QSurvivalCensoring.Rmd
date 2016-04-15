@@ -115,7 +115,6 @@ print(summary(model))
 prepTest$hazardPrediction <- as.numeric(predict(model,newdata=prepTest,type='response'))
 
 testD <- QSurvival::summarizeHazard(prepTest,'ID','observedAge','hazardPrediction',
-                           cumulativeHazardColumnName='cumulativeHazard',
                            survivalColumnName='survival',
                            deathIntensityColumnName='deathIntensity') 
 testRes <- testD$details
@@ -172,7 +171,6 @@ model <- gam(deathEvent~group+s(surrogateAge,k=2),
 prepTestUncensored$hazardPrediction <- 
   as.numeric(predict(model,newdata=prepTestUncensored,type='response'))
 testDU <- QSurvival::summarizeHazard(prepTestUncensored,'ID','observedAge','hazardPrediction',
-                           cumulativeHazardColumnName='cumulativeHazard',
                            survivalColumnName='survival',
                            deathIntensityColumnName='deathIntensity') 
 summary(testDU$expectedLifetime$expectedLifetime)
