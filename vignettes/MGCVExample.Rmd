@@ -63,10 +63,10 @@ summary(model)
 
 colJ <- col1[j,]
 
-dRes <- buildQuasiObsForComparison(colJ, 
+dRes <- buildQuasiObsForApplication(colJ, 
                                     3000,
-                                   colJ$age, ifelse(colJ$status==1,col1$age,NA), 'id',
-                                   'days', 'recurrence')
+                                   'id',
+                                   'days')
 dRes$cappedDays <- pmin(timecut,dRes$days)
 pred <- predict(model,newdata=dRes,type='response',se=TRUE)
 dRes$hazard <- as.numeric(pred$fit)
