@@ -7,5 +7,6 @@ One can use this to reproduce Cox's discrete time logistic hazard model, or buil
 
 To install:
 
-   # install.packages('devtools')
-   devtools::install_github('WinVector/QSurvival', build_vignettes=TRUE)
+  
+    # install.packages('devtools')
+    devtools::install_github('WinVector/QSurvival', build_vignettes=TRUE)
