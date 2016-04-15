@@ -4,7 +4,7 @@ author: "Win-Vector LLC"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{QSurvival on AIDS Data}
+  %\VignetteIndexEntry{Cancer example with mgcv and sampling.}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
