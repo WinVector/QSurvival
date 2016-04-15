@@ -33,11 +33,18 @@ summary(b)
 
 ## plot survival function for patient j...
 
-np <- 300;j <- 6
-newd <- data.frame(time=seq(0,3000,length=np))
-dname <- names(col1)
-for (n in dname) newd[[n]] <- rep(col1[[n]][j],np)
-newd$time <- seq(0,3000,length=np)
+j <- 6
+mknewd <- function(j) {
+  np <- 300;
+  newd <- data.frame(time=seq(0,3000,length=np))
+  dname <- names(col1)
+  for (n in dname) newd[[n]] <- rep(col1[[n]][j],np)
+  newd$time <- seq(0,3000,length=np)
+  newd
+}
+
+newd <- mknewd(j)
+
 fv <- predict(b,newdata=newd,type="response",se=TRUE)
 newd$survival <- as.numeric(fv$fit)
 newd$survivalU <- as.numeric(fv$fit+2*fv$se.fit)
@@ -45,6 +52,15 @@ newd$survivalL <- pmax(0,fv$fit-2*fv$se.fit)
 ggplot(data=newd,mapping=aes(x=time,y=survival,ymin=survivalL,ymax=survivalU)) +
   geom_line() + geom_ribbon(alpha=0.5,fill='blue')
 ```
+
+```{r trycrash, error=TRUE}
+library('dplyr')
+dlist <- lapply(seq_len(nrow(col1)),
+               mknewd)
+bigd <- as.data.frame(bind_rows(dlist),stringsAsFactor=FALSE)
+fbig <- predict(b,newdata=bigd,type="response",se=TRUE)
+```
+
 
 
 ```{r quasiobs}
@@ -61,6 +77,7 @@ model <- gam(recurrence~s(age,by=sex)+sex+s(nodes)+perfor+rx+obstruct+adhere+s(c
          family=binomial,data=dTrain,weights=wts)
 summary(model)
 
+j <- 6
 colJ <- col1[j,]
 
 dRes <- buildQuasiObsForApplication(colJ, 
