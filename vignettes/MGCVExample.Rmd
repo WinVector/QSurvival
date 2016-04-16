@@ -45,7 +45,8 @@ plotF$survival <- as.numeric(fv$fit)
 plotF$survivalU <- as.numeric(fv$fit+2*fv$se.fit)
 plotF$survivalL <- pmax(0,fv$fit-2*fv$se.fit)
 ggplot(data=plotF,mapping=aes(x=time,y=survival,ymin=survivalL,ymax=survivalU)) +
-  geom_line() + geom_ribbon(alpha=0.5,fill='blue')
+  geom_line() + geom_ribbon(alpha=0.5,fill='blue') +
+  ggtitle(paste('mgcv::cox.ph() gam survival model, patient',j))
 ```
 
 
@@ -65,6 +66,28 @@ bigd <- newd[rep(1,n),]
 fbig <- predict(b,newdata=bigd,type="response",se=TRUE)
 ```
 
+Similar calculation using survival::coxph
+
+```{r survivalcoxph}
+library('survival')
+
+dTrain <- col1
+dTrain$surv <- with(dTrain,Surv(time,status!=1))
+fit <- coxph(surv~age:sex+sex+nodes+perfor+rx+obstruct+adhere,
+               data=dTrain)
+summary(fit)
+sdat <- survfit(fit,newdata=dTrain[j,])
+pFrame <- data.frame(time=sdat$time,
+                     survival=sdat$surv,
+                     survivalU=sdat$upper,
+                     survivalL=sdat$lower,
+                     stringsAsFactors = FALSE)
+ggplot(data=pFrame,
+       mapping=aes(x=time,y=survival,ymin=survivalL,ymax=survivalU)) +
+  geom_line() + geom_ribbon(alpha=0.5,fill='blue') +
+  ggtitle(paste('survival::coxph model, patient',j))
+```
+
 
 Similar calculation using QSurvival.
 
@@ -82,7 +105,6 @@ model <- gam(recurrence~s(age,by=sex)+sex+s(nodes)+perfor+rx+obstruct+adhere+s(c
          family=binomial,data=dTrain,weights=wts)
 summary(model)
 
-j <- 6
 colJ <- col1[j,]
 
 dRes <- buildQuasiObsForApplication(colJ, 
@@ -100,5 +122,6 @@ dPlot <- QSurvival::summarizeHazard(dRes,'id','days',
                                      survivalColumnName=c('pclean','pcleanU','pcleanL')) 
 
 ggplot(data=dPlot$details,mapping=aes(x=days,y=pclean,ymin=pcleanL,ymax=pcleanU)) +
-  geom_line() + geom_ribbon(alpha=0.5,fill='blue')
+  geom_line() + geom_ribbon(alpha=0.5,fill='blue') +
+  ggtitle(paste('QSurvival discrete time gam logistic model, patient',j))
 ```

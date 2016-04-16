@@ -219,13 +219,21 @@ Standard survival model.
 
 ```{r stdsurvival}
 library('survival')
+
 dTrain$surv <- with(dTrain,Surv(observedLifetime,!censored))
+
+# Kaplan-Meier
 fit <- survfit(surv~group,
                data=dTrain,
                conf.type = "log-log")
 print(fit)
 plot(fit,conf=TRUE,mark.time=TRUE)
 survdiff(surv~group,dTrain)
+
+# Cox proportional hazard
+fit <- coxph(surv~group,
+               data=dTrain)
+survfit(fit,newdata=dTest[2,'group',drop=FALSE])$surv
 ```
 
 
