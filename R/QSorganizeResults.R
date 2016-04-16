@@ -12,7 +12,7 @@
 #' @param survivalColumnNames character vector, columns to write survival probability in
 #' @param deathIntensityColumnNames vector scalar, columns to write death intensities
 #' @param parallelCluster optional parallel cluster to run on
-#' @return list, details=survival data.frame, expectedLifetime has lifetime estimates
+#' @return list, details=survival data.frame, expectedLifetime has lifetime estimates (lifetime seen in the scoring windows plus a geometric term to count time steps past the window).
 #'
 #' @examples
 #'

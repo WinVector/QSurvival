@@ -25,7 +25,7 @@ summarizeHazard(d, idColumnName, indexColumnName, hazardColumnNames,
 \item{parallelCluster}{optional parallel cluster to run on}
 }
 \value{
-list, details=survival data.frame, expectedLifetime has lifetime estimates
+list, details=survival data.frame, expectedLifetime has lifetime estimates (lifetime seen in the scoring windows plus a geometric term to count time steps past the window).
 }
 \description{
 Sums up hazard function grouped by original ID variable ordered by step.
