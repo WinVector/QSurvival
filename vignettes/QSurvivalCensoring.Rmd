@@ -1,10 +1,10 @@
 ---
-title: "QSurvival do not group by censor status"
+title: "QSurvival do not group by censor status, consider it unobservable"
 author: "Win-Vector LLC"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{QSurvival Censoring}
+  %\VignetteIndexEntry{QSurvival observable variabels}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -160,22 +160,5 @@ dTestAug %>% group_by(censored) %>% summarize(
           observedLifetime=mean(observedLifetime))
 
 
-```
-
-Model on only non-censored data.  Notice we are now close (in expectation).
-
-```{r noncensored}
-prepTrainFullUncensored <- prepTrainFull[!prepTrainFull$censored,]
-prepTestUncensored <- prepTest[!prepTest$censored,]
-model <- gam(deathEvent~group+s(surrogateAge,k=2),
-             data=prepTrainFullUncensored,family=binomial)
-prepTestUncensored$hazardPrediction <- 
-  as.numeric(predict(model,newdata=prepTestUncensored,type='response'))
-testDU <- QSurvival::summarizeHazard(prepTestUncensored,'ID','observedAge','hazardPrediction',
-                           survivalColumnName='survival',
-                           deathIntensityColumnName='deathIntensity') 
-summary(testDU$expectedLifetime$expectedLifetime)
-summary(prepTestUncensored$observedLifetime)
-prepTestUncensored %>% group_by(group) %>% summarize(observedLifetime=mean(observedLifetime))
 ```
 
