@@ -125,7 +125,7 @@ dObservable %>% filter(!censored) %>%
   group_by(group) %>% summarize(meanDuration=mean(observedDuration))
 ```
 
-Notice how neither summary matched the earlier (correct) results.  This is the reason we are using a synthetic data set to demonstrate the effect: it is easy to compare to the normally unobtainable "correct results" (another way to do this is to take an experiment run to exhaustion and then simulate censoring).
+Notice how neither summary matched the earlier (correct) results.  This is the reason we are using a synthetic data set to demonstrate the effect: it is easy to compare to the normally unobtainable "correct results" (another way to do this is to take an experiment run to exhaustion and then simulate censoring).  The QSurvival package allows separate choice of machine learning method, explicit control of time as seen by the model (separte from time as seen by the hazard/survival aggregation), and (through additional joins) the possibility of time-varying covariates.
 
 The main purpose of survival analysis is to reliably produce the above estimates on censored data.  That is we would mostly like to know the conditional group means and
 see a good estimate of the survival curve.
