@@ -13,7 +13,7 @@ vignette: >
 knitr::opts_chunk$set(fig.width=7)
 ```
 
-From help(cox.ph) in mgcv.
+From help(cox.ph) in mgcv.  In mgcv::cox.ph() weights=0 denotes censored.
 
 
 ```{r mgcvexample}
@@ -66,13 +66,13 @@ bigd <- newd[rep(1,n),]
 fbig <- predict(b,newdata=bigd,type="response",se=TRUE)
 ```
 
-Similar calculation using survival::coxph
+Similar calculation using survival::coxph.  In survival::coxph, TRUE means event happened (dead, not censored).
 
 ```{r survivalcoxph}
 library('survival')
 
 dTrain <- col1
-dTrain$surv <- with(dTrain,Surv(time,status!=1))
+dTrain$surv <- with(dTrain,Surv(time,status==1))
 fit <- coxph(surv~age:sex+sex+nodes+perfor+rx+obstruct+adhere,
                data=dTrain)
 summary(fit)
@@ -89,7 +89,7 @@ ggplot(data=pFrame,
 ```
 
 
-Similar calculation using QSurvival.
+Similar calculation using QSurvival.  In QSurvival valid if the event index is in the range 1:numberOfObservations the event happend, if it is NA our out of range it is censored.
 
 ```{r quasiobs}
 library('QSurvival')
