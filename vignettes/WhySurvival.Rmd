@@ -1,0 +1,241 @@
+---
+title: "Why Survival Analysis"
+author: "Win-Vector LLC"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Why Survival Analysis}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width=7)
+```
+
+```{r makedata,echo=FALSE,messages=FALSE,warnings=FALSE,results='hide'}
+suppressWarnings(suppressMessages(library("ggplot2")))
+suppressWarnings(suppressMessages(library('dplyr')))
+suppressWarnings(suppressMessages(library('mgcv')))
+set.seed(32535)
+
+
+mkData <- function(n) {
+  params <- list(groupA=list(k=1.8,lambda=50),
+                 groupB=list(k=1.8,lambda=30))
+  d <- data.frame(group = sample(c('groupA', 'groupB'), n, replace = TRUE),
+                  stringsAsFactors = FALSE)
+  d$actualDuration <- vapply(seq_len(nrow(d)),
+                                 function(i) {
+                                   max(1, round(rweibull(
+                                     1, shape = params[[d[i, 'group']]][['k']],
+                                     scale = params[[d[i, 'group']]][['lambda']]
+                                   )))
+                                 },
+                                 numeric(1))
+  censorPoint <- vapply(seq_len(nrow(d)),
+                                 function(i) {
+                                   max(1, round(rweibull(
+                                     1, shape = params[[d[i, 'group']]][['k']],
+                                     scale = 1.5*params[[d[i, 'group']]][['lambda']]
+                                   )))
+                                 },
+                                 numeric(1))
+  d$observedDuration <- pmin(d$actualDuration, censorPoint)
+  d$censored <- d$actualDuration > d$observedDuration
+  d
+}
+
+dTheoretical <- mkData(200)
+dIdeal <- dTheoretical
+dIdeal$observedDuration <- NULL
+dIdeal$censored <- NULL
+dObservable <- dTheoretical
+dObservable$actualDuration <- NULL  
+```
+
+Suppose we are running a study of a consumable product 
+(such as ink cartridges, diswasher detergent, car tires)
+and we want to determine the product lifetime conditioned on 
+being a product used by consumers in "groupA" and consumers on "groupB."
+Further the experiment is such that groupA and groupB 
+are (by design) very different groups (heav/light users, expert/inexpert and so on)
+and our goal is to measure expected lifetime of the product conditioned on 
+the group.
+
+The simplest case is perfect information: we get reports back from all participants and the study is run long enough to exhaust all products.  In this case 
+we have a data.frame similar to dIdeal and we can perform the following simple analysis or summarization.
+
+```{r idealcase}
+head(dIdeal)
+ggplot(mapping=aes(x=actualDuration,color=group,fill=group)) +
+  geom_density(data=dIdeal,alpha=0.5) +
+  ggtitle('Actual duration, ideal study')
+
+dIdeal %>% group_by(group) %>% summarize(meanDuration=mean(actualDuration))
+
+plotIdealS <- QSurvival::summarizeActualFrame(dIdeal,'group','actualDuration')
+dIdeal %>% left_join(plotIdealS,by=c('actualDuration','group')) -> annotatedObs
+ggplot(mapping=aes(x=actualDuration,y=survival,color=group)) +
+  geom_line(data=plotIdealS) + 
+  geom_point(data=annotatedObs,shape=3) +  # geom_rug(data=annotatedObs) +
+  ggtitle("Survival Curve:\nFraction of ideal study surviving to a given duration")
+
+
+ggplot(mapping=aes(x=actualDuration,color=group,fill=group)) +
+  geom_line(mapping=aes(y=survival),
+            data=cbind(plotIdealS,data.frame(frame='surviving fraction'))) + 
+  geom_point(mapping=aes(y=survival),
+             data=cbind(annotatedObs,data.frame(frame='surviving fraction')),
+             shape=3) + 
+  geom_density(data=cbind(dIdeal,data.frame(frame='expiration density')),
+                 alpha=0.5) +
+  facet_wrap(~frame,ncol=1,scale='free_y') +
+  ggtitle("Ideal distribution of survival to a given duration by group")
+
+
+```
+
+
+The confounding factor is going to in the real world we almost never will have complete reports back from all indivduals. This can be for a number of reasons:
+
+  * Participants that are added late in the study.  So they haven't really had time to exhaust their product.
+  * Participants that leave the study or those we lose contact with before they exhaust the study.
+  * Participants that last a very long time.
+  
+Instead of having a data frame like dIdeal we are much more likely to have one like dObservable shown below.
+
+```{r observable}
+head(dObservable)
+```
+
+The idea is the rows with "censored=TRUE" represent particpants that had not
+run out when we last heard from them or when we chose to analyse or end the study.
+The observedDuraton for the censored partcipants is how long they had been in the study when we last had record of them.  The point being: we don't know the survival duration of the censored participant.  We know a lower bound on it (they lasted at least as long as we recorded), but the measurements are considered "right censored" in that for each partcipant we can't see past a certain point "to the right" on a number line.
+
+Now we can't naively repeat the above analysis as this gives us silly (wrong) results.  Neither leaving all the censored data in or taking it out is gauranteed to give good results.
+
+```{r naive}
+# all data wrong analysis
+dObservable %>% group_by(group) %>% summarize(meanDuration=mean(observedDuration))
+
+# non-censored data wrong analysis
+dObservable %>% filter(!censored) %>%
+  group_by(group) %>% summarize(meanDuration=mean(observedDuration))
+```
+
+Notice how neither summary mached the earlier (correct) results.  This is the reason we are using a synthetic data set to demonstrate the effect: it is easy to compare to the normally unobtainable "correct results" (another way to do this is to take an experiment run to exhaustion and then simulate censoring).
+
+The main purpose of survival analysis is to reliably produce the above estimates on censored data.  That is we would mostly like to know the conditional group means and
+see a good estimate of the survival curve.
+
+This goal confuses many data scientists who assume the primary purpose of survival analysis is to make detailed distribution of lifetime predictions on new individuals (those not in the original study).  This is something survival analysis certainly does, but not how a classic statistician is likely to think of survival analysis.
+
+The main reason a classic statistician might build a complicated surival model (invovling many variables and interactions) is to help get a reliable aggregated population survival curve from censored data (often with two groups representing medical treatment and control).  All they want is to reliably build the original aggregates and graphs on censored data (as most realistic studies are censored by study end, participants leaving the study, and other uncontrollable external influences).
+
+Let's try to recover a good estimate of the unobservable ideal curves from the observable data.  Instead of using one of the [many R survival packages](https://cran.r-project.org/web/views/Survival.html) we will use our educational package [QSurvival](https://github.com/WinVector/QSurvival) which explicitly exposes so-called "quasi observations" to convert a survival problem into 
+a standard classification problem.  This is different than the dominant survival model (Cox's continuous time proportonal hazards model) but very close to Cox's own discrete time logistic regresson hazards model.
+
+This is to emphasize: that there are many important concepts in survival theory, but the two most important points are:
+
+  * You can't wish away censoring.
+  * Moving from modeling survival or lifetime to modeling "hazard" (probability of dying in a given time inteval conditioned on being alive at the beginning of the interval).
+  
+Here is our example quasi observation analysis:
+
+
+
+```{r surivalanalysis}
+# Expand censored duration data into time step to time step hazard quasi events.
+prepTrain <-
+  QSurvival::buildQuasiObsForTraining(
+    dObservable,
+    dObservable$observedDuration,
+    ifelse(dObservable$censored, NA, dObservable$observedDuration),
+    'ID',
+    'observedAge',
+    'exhaustionEvent')
+# cap age to prevent base hazard from extrapolating in non-meaningful way
+ageCeiling <- 100
+prepTrain$cappedAge <- prepTrain$observedAge>=ageCeiling
+prepTrain$surrogateAge <- pmin(ageCeiling,prepTrain$observedAge)
+
+# Build  classification model on hazard on group and quasi event observedAg
+model <- gam(exhaustionEvent ~ group + s(observedAge) + cappedAge,
+             data=prepTrain,family=binomial)
+
+# re-expand original population for plotting
+prepStudy <-  
+  QSurvival::buildQuasiObsForTraining(
+    dObservable,
+    150,
+    ifelse(dObservable$censored, NA, dObservable$observedDuration),
+    'ID',
+    'observedAge',
+    'exhaustionEvent')
+prepStudy$cappedAge <- prepStudy$observedAge>=ageCeiling
+prepStudy$surrogateAge <- pmin(ageCeiling,prepStudy$observedAge)
+
+# predict the hazard
+prepStudy$hazard <- predict(model,newdata=prepStudy,type='response')
+
+# summarize the result
+studyD <- QSurvival::summarizeHazard(prepStudy,'ID','observedAge','hazard',
+                           survivalColumnName='survival',
+                           deathIntensityColumnName='exhaustionIntensity')
+studyD$details %>% group_by(group,observedAge) %>% 
+  summarize(survival=mean(survival),
+            exhaustionIntensity=mean(exhaustionIntensity)) -> plotS
+
+dResult <- dObservable
+dResult$expectedLifetime <- studyD$expectedLifetime$survival
+dResult %>% group_by(group) %>% summarize(expectedLifetime=mean(expectedLifetime))
+
+ggplot(data=plotS,mapping=aes(x=observedAge,color=group)) +
+  geom_line(mapping=aes(y=survival)) + 
+  ggtitle("modeled survival curves")
+
+ggplot(data=plotS,mapping=aes(x=observedAge,color=group)) +
+  geom_ribbon(mapping=aes(ymin=0,ymax=exhaustionIntensity,fill=group),alpha=0.5) +
+  ggtitle("modeled exhaustion intensity (equals age distribution on exhaustion)")
+
+ggplot(mapping=aes(x=observedAge,color=group)) +
+  geom_line(data=cbind(plotS,data.frame(frame='surviving fraction')),
+            mapping=aes(y=survival)) + 
+  geom_ribbon(data=cbind(plotS,data.frame(frame='expiration density')),
+              mapping=aes(ymin=0,ymax=exhaustionIntensity,fill=group),alpha=0.5) +
+  facet_wrap(~frame,ncol=1,scale='free_y') +
+  ggtitle("modeled survival curves")
+
+```
+
+We must emphasize the survival model is attempting to correct for censoring, but is not immune to it.  With no censoring survival modeling is very accurate. but unless you have strong reasons to believe the structural assumptions of the particular survival model will not outperform an appropriate regression!  With a moderate amount of censoring survival modeling is very useful.  With complete censoring basic survival modelign predicts everything as lasting forever (as is true for the data it was shown).  So think of the quality of a survival model as degrading as the degree of censorship goes up, but realize it is better than not explicitly dealing with the censorship issue (be it random or be it systematic).
+
+Notice we didn't use a test/train split as for this example we are not trying to predict expected lifetimes on future data (something survival modelins is capable of) but instead infer something about the ideal population (one where everybody compelets the study) related to observed population at hand.  This group inference (treatment coefficients and expected outcome lifetimes) is the primary goal of many survival studies so it is what many of the packages are optimized for.  The complexity of our above analysis is because the QSurvive package is organized around prediction for individuals (what data scientist most want) so we have to explicitly aggregate to even see the important original inferences.
+
+The standard method is illustrated below:
+
+```{r stdsurvival}
+library('survival')
+
+dSurv <- dObservable
+# In Surv() TRUE means event happened (dead, not censored).
+dSurv$surv <- with(dSurv,Surv(observedDuration,!censored))
+
+# Kaplan-Meier
+fit <- survfit(surv~group,
+               data=dSurv,
+               conf.type = "log-log")
+print(fit)
+plot(fit,conf=TRUE,mark.time=TRUE)
+survdiff(surv~group,dSurv)
+
+# Cox proportional hazard
+fit <- coxph(surv~group,
+               data=dSurv)
+print(fit)
+plot(survfit(fit,newdata=dSurv))
+```
+
+
+

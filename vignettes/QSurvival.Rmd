@@ -29,16 +29,18 @@ params <- list(groupA=list(k=1.8,lambda=50),
 censorPoint = 50
 
 mkData <- function(n) {
-  d <- data.frame(group=sample(c('groupA','groupB'),n,replace=TRUE),
-                  stringsAsFactors=FALSE)
+  d <- data.frame(group = sample(c('groupA', 'groupB'), n, replace = TRUE),
+                  stringsAsFactors = FALSE)
   d$unobservedLifetime <- vapply(seq_len(nrow(d)),
                                  function(i) {
-                                   max(1,round(rweibull(1,shape=params[[d[i,'group']]][['k']],
-                                                        scale=params[[d[i,'group']]][['lambda']])))
+                                   max(1, round(rweibull(
+                                     1, shape = params[[d[i, 'group']]][['k']],
+                                     scale = params[[d[i, 'group']]][['lambda']]
+                                   )))
                                  },
                                  numeric(1))
-  d$observedLifetime <- pmin(d$unobservedLifetime,censorPoint)
-  d$censored <- d$unobservedLifetime>d$observedLifetime
+  d$observedLifetime <- pmin(d$unobservedLifetime, censorPoint)
+  d$censored <- d$unobservedLifetime > d$observedLifetime
   d
 }
 
