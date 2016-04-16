@@ -21,8 +21,8 @@ set.seed(32535)
 
 
 mkData <- function(n) {
-  params <- list(groupA=list(k=1.8,lambda=50),
-                 groupB=list(k=1.8,lambda=30))
+  params <- list(groupA=list(k=0.9,lambda=60),
+                 groupB=list(k=1.2,lambda=30))
   d <- data.frame(group = sample(c('groupA', 'groupB'), n, replace = TRUE),
                   stringsAsFactors = FALSE)
   d$actualDuration <- vapply(seq_len(nrow(d)),
@@ -46,7 +46,7 @@ mkData <- function(n) {
   d
 }
 
-dTheoretical <- mkData(200)
+dTheoretical <- mkData(400)
 dIdeal <- dTheoretical
 dIdeal$observedDuration <- NULL
 dIdeal$censored <- NULL
@@ -93,8 +93,6 @@ ggplot(mapping=aes(x=actualDuration,color=group,fill=group)) +
                  alpha=0.5) +
   facet_wrap(~frame,ncol=1,scale='free_y') +
   ggtitle("Ideal distribution of survival to a given duration by group")
-
-
 ```
 
 
@@ -108,6 +106,7 @@ Instead of having a data frame like dIdeal we are much more likely to have one l
 
 ```{r observable}
 head(dObservable)
+summary(dObservable)
 ```
 
 The idea is the rows with "censored=TRUE" represent participants that had not
@@ -157,19 +156,21 @@ prepTrain <-
     'observedAge',
     'exhaustionEvent')
 # cap age to prevent base hazard from extrapolating in non-meaningful way
-ageCeiling <- 100
+ageCeiling <- 400
 prepTrain$cappedAge <- prepTrain$observedAge>=ageCeiling
 prepTrain$surrogateAge <- pmin(ageCeiling,prepTrain$observedAge)
+prepTrain$group <- as.factor(prepTrain$group)
 
 # Build  classification model on hazard on group and quasi event observedAg
-model <- gam(exhaustionEvent ~ group + s(observedAge) + cappedAge,
+model <- gam(exhaustionEvent ~  group + s(observedAge,by=group) + cappedAge:group,
              data=prepTrain,family=binomial)
+summary(model)
 
 # re-expand original population for plotting
 prepStudy <-  
   QSurvival::buildQuasiObsForTraining(
     dObservable,
-    150,
+    600,
     ifelse(dObservable$censored, NA, dObservable$observedDuration),
     'ID',
     'observedAge',
@@ -179,6 +180,8 @@ prepStudy$surrogateAge <- pmin(ageCeiling,prepStudy$observedAge)
 
 # predict the hazard
 prepStudy$hazard <- predict(model,newdata=prepStudy,type='response')
+# put in a hazard floor
+prepStudy$hazard <- pmax(prepStudy$hazard,1/(2*max(prepStudy$observedAge)+1))
 
 # summarize the result
 studyD <- QSurvival::summarizeHazard(prepStudy,'ID','observedAge','hazard',

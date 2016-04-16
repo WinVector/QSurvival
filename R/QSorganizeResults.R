@@ -76,17 +76,25 @@ summarizeHazard <- function(d,idColumnName,indexColumnName,
     dlist <- parallel::parLapply(parallelCluster,dlist,worker)
   }
   dH <- as.data.frame(dplyr::bind_rows(dlist),stringsAsFactors=FALSE)
-  expectedLifetime <- lapply(dlist,function(di) {
-    ri <- data.frame(di[1,idColumnName],
-                     stringsAsFactors = FALSE)
-    colnames(ri) <- idColumnName
-    for(j in seq_len(length(survivalColumnNames))) {
-      scn <- survivalColumnNames[[j]]
-      ri[[scn]] <- sum(di[[scn]])
-    }
-    ri
-  })
-  expectedLifetime <- as.data.frame(dplyr::bind_rows(expectedLifetime),stringsAsFactors=FALSE)
+  expectedLifetimes <- lapply(dlist,
+                              function(di) {
+                                ri <- data.frame(di[1,idColumnName],
+                                                 stringsAsFactors = FALSE)
+                                colnames(ri) <- idColumnName
+                                ni <- nrow(di)
+                                for(j in seq_len(length(survivalColumnNames))) {
+                                  hcn <- hazardColumnNames[[j]]
+                                  scn <- survivalColumnNames[[j]]
+                                  residualExpectation <- 0.0
+                                  if(di[ni,hcn]>0) {
+                                    # expected lifetime after window geometric model
+                                    residualExpectation <- di[ni,scn]/di[ni,hcn]
+                                  }
+                                  ri[[scn]] <- sum(di[[scn]]) + residualExpectation
+                                }
+                                ri
+                              })
+  expectedLifetime <- as.data.frame(dplyr::bind_rows(expectedLifetimes),stringsAsFactors=FALSE)
   list(details=dH,expectedLifetime=expectedLifetime)
 }
 
