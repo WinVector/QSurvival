@@ -33,35 +33,40 @@ summary(b)
 
 ## plot survival function for patient j...
 
-j <- 6
-mknewd <- function(j) {
-  np <- 300;
-  newd <- data.frame(time=seq(0,3000,length=np))
-  dname <- names(col1)
-  for (n in dname) newd[[n]] <- rep(col1[[n]][j],np)
-  newd$time <- seq(0,3000,length=np)
-  newd
-}
-
-newd <- mknewd(j)
-
+np <- 300;j <- 6
+newd <- data.frame(time=seq(0,3000,length=np))
+dname <- names(col1)
+for (n in dname) newd[[n]] <- rep(col1[[n]][j],np)
+newd$time <- seq(0,3000,length=np)
 fv <- predict(b,newdata=newd,type="response",se=TRUE)
-newd$survival <- as.numeric(fv$fit)
-newd$survivalU <- as.numeric(fv$fit+2*fv$se.fit)
-newd$survivalL <- pmax(0,fv$fit-2*fv$se.fit)
-ggplot(data=newd,mapping=aes(x=time,y=survival,ymin=survivalL,ymax=survivalU)) +
+
+plotF <- newd[,c('id','time')]
+plotF$survival <- as.numeric(fv$fit)
+plotF$survivalU <- as.numeric(fv$fit+2*fv$se.fit)
+plotF$survivalL <- pmax(0,fv$fit-2*fv$se.fit)
+ggplot(data=plotF,mapping=aes(x=time,y=survival,ymin=survivalL,ymax=survivalU)) +
   geom_line() + geom_ribbon(alpha=0.5,fill='blue')
 ```
 
-```{r trycrash, error=TRUE}
-library('dplyr')
-dlist <- lapply(seq_len(nrow(col1)),
-               mknewd)
-bigd <- as.data.frame(bind_rows(dlist),stringsAsFactor=FALSE)
+
+The mgcv::cox.ph appears to have a fixed buffer size of 1000 rows.
+
+```{r trycrashpass}
+n <- 1000
+print(n)
+bigd <- newd[rep(1,n),]
+fbig <- predict(b,newdata=bigd,type="response",se=TRUE)
+```
+
+```{r trycrashfail, error=TRUE}
+n <- 1001
+print(n)
+bigd <- newd[rep(1,n),]
 fbig <- predict(b,newdata=bigd,type="response",se=TRUE)
 ```
 
 
+Similar calculation using QSurvival.
 
 ```{r quasiobs}
 library('QSurvival')
