@@ -220,6 +220,7 @@ Standard survival model.
 ```{r stdsurvival}
 library('survival')
 
+# In Surv() TRUE means event happened (dead, not censored).
 dTrain$surv <- with(dTrain,Surv(observedLifetime,!censored))
 
 # Kaplan-Meier
