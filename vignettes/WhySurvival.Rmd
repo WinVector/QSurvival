@@ -75,7 +75,7 @@ ggplot(mapping=aes(x=actualDuration,color=group,fill=group)) +
 dIdeal %>% group_by(group) %>% summarize(meanDuration=mean(actualDuration))
 
 plotIdealS <- QSurvival::summarizeActualFrame(dIdeal,'group','actualDuration')
-dIdeal %>% left_join(plotIdealS,by=c('actualDuration','group')) -> annotatedObs
+dIdeal %>% inner_join(plotIdealS,by=c('actualDuration','group')) -> annotatedObs
 ggplot(mapping=aes(x=actualDuration,y=survival,color=group)) +
   geom_line(data=plotIdealS) + 
   geom_point(data=annotatedObs,shape=3) +  # geom_rug(data=annotatedObs) +
@@ -191,8 +191,13 @@ dResult <- dObservable
 dResult$expectedLifetime <- studyD$expectedLifetime$survival
 dResult %>% group_by(group) %>% summarize(expectedLifetime=mean(expectedLifetime))
 
-ggplot(data=plotS,mapping=aes(x=observedAge,color=group)) +
-  geom_line(mapping=aes(y=survival)) + 
+dResult %>% filter(!censored) -> dResultA
+colnames(dResultA)[which(colnames(dResult)=='observedDuration')] = 'observedAge'
+dResultA %>% inner_join(plotS,by=c('observedAge','group')) -> annotatedObsR
+
+ggplot(mapping=aes(x=observedAge,color=group)) +
+  geom_line(data=plotS,mapping=aes(y=survival)) + 
+  geom_point(data=annotatedObsR,mapping=aes(y=survival),shape=3) +
   ggtitle("modeled survival curves")
 
 ggplot(data=plotS,mapping=aes(x=observedAge,color=group)) +
@@ -200,18 +205,21 @@ ggplot(data=plotS,mapping=aes(x=observedAge,color=group)) +
   ggtitle("modeled exhaustion intensity (equals age distribution on exhaustion)")
 
 ggplot(mapping=aes(x=observedAge,color=group)) +
-  geom_line(data=cbind(plotS,data.frame(frame='surviving fraction')),
+  geom_line(data=cbind(plotS,
+                       data.frame(frame='surviving fraction')),
             mapping=aes(y=survival)) + 
+  geom_point(data=cbind(annotatedObsR,
+                        data.frame(frame='surviving fraction')),
+             mapping=aes(y=survival),shape=3) +
   geom_ribbon(data=cbind(plotS,data.frame(frame='expiration density')),
               mapping=aes(ymin=0,ymax=exhaustionIntensity,fill=group),alpha=0.5) +
   facet_wrap(~frame,ncol=1,scale='free_y') +
-  ggtitle("modeled survival curves")
-
+  ggtitle("Modeled distribution of survival to a given duration by group")
 ```
 
 We must emphasize the survival model is attempting to correct for censoring, but is not immune to it.  With no censoring survival modeling is very accurate. but unless you have strong reasons to believe the structural assumptions of the particular survival model will not outperform an appropriate regression!  With a moderate amount of censoring survival modeling is very useful.  With complete censoring basic survival modelign predicts everything as lasting forever (as is true for the data it was shown).  So think of the quality of a survival model as degrading as the degree of censorship goes up, but realize it is better than not explicitly dealing with the censorship issue (be it random or be it systematic).
 
-Notice we didn't use a test/train split as for this example we are not trying to predict expected lifetimes on future data (something survival modelins is capable of) but instead infer something about the ideal population (one where everybody compelets the study) related to observed population at hand.  This group inference (treatment coefficients and expected outcome lifetimes) is the primary goal of many survival studies so it is what many of the packages are optimized for.  The complexity of our above analysis is because the QSurvive package is organized around prediction for individuals (what data scientist most want) so we have to explicitly aggregate to even see the important original inferences.
+Notice we didn't use a test/train split as for this example we are not trying to predict expected lifetimes on future data (something survival modelins is capable of) but instead infer something about the ideal population (one where everybody compelets the study) related to observed population at hand.  This group inference (treatment coefficients, expected outcome lifetimes, and significances) is the primary goal of many survival studies so it is what many of the packages are optimized for.  The complexity of our above analysis is because the QSurvive package is organized around prediction for individuals (what data scientist most want) so we have to explicitly aggregate to even see the important original inferences.
 
 The standard method is illustrated below:
 
@@ -227,14 +235,16 @@ fit <- survfit(surv~group,
                data=dSurv,
                conf.type = "log-log")
 print(fit)
-plot(fit,conf=TRUE,mark.time=TRUE)
+plot(fit,mark.time=TRUE)
 survdiff(surv~group,dSurv)
 
 # Cox proportional hazard
 fit <- coxph(surv~group,
                data=dSurv)
 print(fit)
-plot(survfit(fit,newdata=dSurv))
+rowIndexes <- c(min(which(dSurv$group=='groupA')),
+                min(which(dSurv$group=='groupB')))
+plot(survfit(fit,newdata=dSurv[rowIndexes,]))
 ```
 
 
