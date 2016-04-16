@@ -78,9 +78,10 @@ plotIdealS <- QSurvival::summarizeActualFrame(dIdeal,'group','actualDuration')
 dIdeal %>% inner_join(plotIdealS,by=c('actualDuration','group')) -> annotatedObs
 ggplot(mapping=aes(x=actualDuration,y=survival,color=group)) +
   geom_line(data=plotIdealS) + 
-  geom_point(data=annotatedObs,shape=3) +  # geom_rug(data=annotatedObs) +
+  geom_point(data=annotatedObs,shape=3) + 
+  geom_rug(data=annotatedObs,sides='bl') +
   ggtitle("Survival Curve:\nFraction of ideal study surviving to a given duration")
-
+# The "rug" isn't very legible- but the idea is the distribution is uniform on the y-axis.
 
 ggplot(mapping=aes(x=actualDuration,color=group,fill=group)) +
   geom_line(mapping=aes(y=survival),
@@ -195,9 +196,10 @@ dResult %>% filter(!censored) -> dResultA
 colnames(dResultA)[which(colnames(dResult)=='observedDuration')] = 'observedAge'
 dResultA %>% inner_join(plotS,by=c('observedAge','group')) -> annotatedObsR
 
-ggplot(mapping=aes(x=observedAge,color=group)) +
-  geom_line(data=plotS,mapping=aes(y=survival)) + 
-  geom_point(data=annotatedObsR,mapping=aes(y=survival),shape=3) +
+ggplot(mapping=aes(x=observedAge,y=survival,color=group)) +
+  geom_line(data=plotS) + 
+  geom_rug(data=annotatedObsR,sides='bl') +
+  geom_point(data=annotatedObsR,shape=3) +
   ggtitle("modeled survival curves")
 
 ggplot(data=plotS,mapping=aes(x=observedAge,color=group)) +
@@ -223,7 +225,7 @@ We must emphasize the survival model is attempting to correct for censoring, but
 
 Notice we didn't use a test/train split as for this example we are not trying to predict expected lifetimes on future data (something survival modeling is capable of) but instead infer something about the ideal population (one where everybody completes the study) related to observed population at hand.  This group inference (treatment coefficients, expected outcome lifetimes, and significances) is the primary goal of many survival studies so it is what many of the packages are optimized for.  The complexity of our above analysis is because the QSurvive package is organized around prediction for individuals (what data scientist most want) so we have to explicitly aggregate to even see the important original inferences.
 
-The standard method is illustrated below:
+The standard method is illustrated below.  This may appear short or cryptic- but is because (as is common with many statistical methodologies) the method is packaging the intended standard use into one or two steps, regardless of how many conceptual steps a didactic or tool-oriented view might imply.
 
 ```{r stdsurvival}
 library('survival')
