@@ -14,7 +14,7 @@ summarizeHazard(d, idColumnName, indexColumnName, hazardColumnNames,
 
 \item{idColumnName}{character scalar, column containing original row ids}
 
-\item{indexColumnName}{character scalar, column containing quasi event indices}
+\item{indexColumnName}{character scalar, column containing quasi event indices. Indices must be complete intevvals 1:k for some k.}
 
 \item{hazardColumnNames}{character vector, columns containing hazard scores}
 

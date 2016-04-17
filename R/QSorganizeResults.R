@@ -7,7 +7,7 @@
 #'
 #' @param d data.frame
 #' @param idColumnName character scalar, column containing original row ids
-#' @param indexColumnName character scalar, column containing quasi event indices
+#' @param indexColumnName character scalar, column containing quasi event indices. Indices must be complete intevvals 1:k for some k.
 #' @param hazardColumnNames character vector, columns containing hazard scores
 #' @param survivalColumnNames character vector, columns to write survival probability in
 #' @param deathIntensityColumnNames vector scalar, columns to write death intensities
@@ -51,6 +51,13 @@ summarizeHazard <- function(d,idColumnName,indexColumnName,
     force(survivalColumnNames)
     force(deathIntensityColumnNames)
     function(di) {
+      # need di to be ordered 1:k for some k>=1
+      dii <-di[[indexColumnName]]
+      if((min(dii)<1)||(max(dii)>length(dii))||
+         (any(sort(dii)!=seq_len(length(dii))))) {
+          stop("QSurvive::summarizeHazard timesteps must be 1:k intervals")
+      }
+      di <- di[order(dii),]
       for(j in seq_len(length(hazardColumnNames))) {
         scn <- survivalColumnNames[[j]]
         hcn <- hazardColumnNames[[j]]
