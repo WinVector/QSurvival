@@ -32,8 +32,29 @@ summarizeHazard <- function(d,idColumnName,indexColumnName,
                             survivalColumnNames='survival',
                             deathIntensityColumnNames=NULL,
                             parallelCluster=NULL) {
+  if(!("data.frame" %in% class(d))) {
+    stop("summarizeHazard d must be a data.frame")
+  }
+  if(!(idColumnName %in% colnames(d))) {
+    stop("summarizeHarard must have idColumnName in data frame")
+  }
+  if(!(indexColumnName %in% colnames(d))) {
+    stop("summarizeHarard must have indexColumnName in data frame")
+  }
+  if(!all(hazardColumnNames %in% colnames(d))) {
+    stop("summarizeHarard must have hazardColumnNames in data frame")
+  }
   if(length(hazardColumnNames)!=length(survivalColumnNames)) {
     stop('summarizeHazard must have length(hazardColumnNames)==length(survivalColumnNames)')
+  }
+  if(min(d[,hazardColumnNames])<0) {
+    stop('summarizeHazard must have non-negative hazard')
+  }
+  if(max(d[,hazardColumnNames])>1) {
+    stop('summarizeHazard must have hazard <=1')
+  }
+  if(any(is.na(d[,hazardColumnNames]))) {
+    stop('summaryHazard can not have NA in hazard')
   }
   if((!is.null(deathIntensityColumnNames))&&
      (length(hazardColumnNames)!=length(deathIntensityColumnNames))) {
@@ -151,6 +172,15 @@ summarizeActual <- function(ages,range) {
 #' @export
 summarizeActualFrame <- function(d,groupColumnName,ageColumnName,
                                  parallelCluster=NULL) {
+  if(!("data.frame" %in% class(d))) {
+    stop("summarizeActualFrame d must be a data.frame")
+  }
+  if(!(groupColumnName %in% colnames(d))) {
+    stop("summarizeActualFrame must have groupColumnName in data frame")
+  }
+  if(!(ageColumnName %in% colnames(d))) {
+    stop("summarizeActualFrame must have ageColumnName in data frame")
+  }
   range <- max(d[[ageColumnName]])
   dlist <- split(d,d[[groupColumnName]])
   mkWorker <- function(groupColumnName,ageColumnName) {

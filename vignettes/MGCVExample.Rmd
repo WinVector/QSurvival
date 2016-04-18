@@ -96,7 +96,7 @@ library('QSurvival')
 
 timecut <- 2750
 dTrain <- buildQuasiObsForTraining(col1, 
-                                   col1$time, ifelse(col1$status==1,col1$time,NA), 'id',
+                                   col1$time, ifelse(col1$status==1,col1$time,NA), 'origRowID',
                                    'days', 'recurrence',
                                    targetSize=20000,forceEvent=TRUE,weightsColumnName='wts')
 dTrain$cappedDays <- pmin(timecut,dTrain$days)
@@ -109,7 +109,7 @@ colJ <- col1[j,]
 
 dRes <- buildQuasiObsForApplication(colJ, 
                                     3000,
-                                   'id',
+                                   'origRowID',
                                    'days')
 dRes$cappedDays <- pmin(timecut,dRes$days)
 pred <- predict(model,newdata=dRes,type='response',se=TRUE)
@@ -117,7 +117,7 @@ dRes$hazard <- as.numeric(pred$fit)
 # Note: note the same error-bar method as the literature!
 dRes$hazardU <- as.numeric(pred$fit+2*pred$se.fit)
 dRes$hazardL <- pmax(0,pred$fit-2*pred$se.fit)
-dPlot <- QSurvival::summarizeHazard(dRes,'id','days',
+dPlot <- QSurvival::summarizeHazard(dRes,'origRowID','days',
                                      c('hazard','hazardU','hazardL'),
                                      survivalColumnName=c('pclean','pcleanU','pcleanL')) 
 

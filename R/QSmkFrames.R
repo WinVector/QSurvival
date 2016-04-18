@@ -30,6 +30,15 @@ buildQuasiObs <- function(d,observationWindowWidth,
   if(n<=0) {
     stop("buildQuasiObs d must be a non-empty data.frame")
   }
+  if(idColumnName %in% colnames(d)) {
+    stop("buildQuasiObs must not have idColumnName in data frame")
+  }
+  if(indexColumnName %in% colnames(d)) {
+    stop("buildQuasiObs must not have indexColumnName in data frame")
+  }
+  if(eventColumnName %in% colnames(d)) {
+    stop("buildQuasiObs must not have eventColumnName in data frame")
+  }
   numberOfObservations <- as.numeric(numberOfObservations)
   if(length(numberOfObservations)==1) {
     numberOfObservations <- rep(numberOfObservations,n)
