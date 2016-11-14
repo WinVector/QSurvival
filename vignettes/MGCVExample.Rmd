@@ -73,7 +73,7 @@ library('survival')
 
 dTrain <- col1
 dTrain$surv <- with(dTrain,Surv(time,status==1))
-fit <- coxph(surv~age:sex+sex+nodes+perfor+rx+obstruct+adhere,
+fit <- coxph(surv~age:sex+age+sex+nodes+perfor+rx+obstruct+adhere,
                data=dTrain)
 summary(fit)
 sdat <- survfit(fit,newdata=dTrain[j,])

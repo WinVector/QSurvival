@@ -210,13 +210,13 @@ ggplot(data=plotS,mapping=aes(x=observedAge,color=group)) +
   ggtitle("modeled exhaustion intensity (equals age distribution on exhaustion)")
 
 ggplot(mapping=aes(x=observedAge,color=group)) +
-  geom_line(data=cbind(plotS,
+  geom_line(data=cbind(data.frame(plotS),
                        data.frame(frame='surviving fraction')),
             mapping=aes(y=survival)) + 
-  geom_point(data=cbind(annotatedObsR,
+  geom_point(data=cbind(data.frame(annotatedObsR),
                         data.frame(frame='surviving fraction')),
              mapping=aes(y=survival),shape=3) +
-  geom_ribbon(data=cbind(plotS,data.frame(frame='expiration density')),
+  geom_ribbon(data=cbind(data.frame(plotS),data.frame(frame='expiration density')),
               mapping=aes(ymin=0,ymax=exhaustionIntensity,fill=group),alpha=0.5) +
   facet_wrap(~frame,ncol=1,scale='free_y') +
   ggtitle("Modeled distribution of survival to a given duration by group")
